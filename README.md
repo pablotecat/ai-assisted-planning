@@ -11,11 +11,27 @@ Agentes para investigar código y documentación local, refinar requisitos aport
 | `agente-refinamiento` | Redacta borradores trazables por historia. |
 | `agente-revisor` | Revisa versiones publicadas y documenta hallazgos. |
 
-## Instalación
+## Instalación en OpenCode
 
-Copia `agent/`, `plugin/`, `tools/`, `skills/`, `package.json`, `opencode.json` y `agent-settings.example.json` a `.opencode/` del proyecto anfitrión. Ejecuta `npm install` en esa carpeta. Si el anfitrión ya tiene `opencode.json`, conserva sus opciones y añade `"subagent_depth": 4`. Instala Codegraph e indexa el workspace si vas a consultar código; prepara MarkItDown si vas a convertir otros formatos documentales. Reinicia OpenCode después de instalar o cambiar agentes, plugin o permisos.
+Necesitas [OpenCode](https://opencode.ai/docs/), [APM](https://microsoft.github.io/apm/getting-started/installation/), [Node.js 24 o posterior](https://nodejs.org/en/download) y [Git](https://git-scm.com/downloads) (APM lo utiliza para descargar paquetes). Abre una terminal en la **carpeta raíz del proyecto** donde usarás los agentes, no en `.opencode/`, y ejecuta estos dos comandos:
 
-Copia `agent-settings.example.json` a `agent-settings.json` dentro de `.opencode/`. Indica rutas absolutas de workspace y raíces documentales solo para el proyecto anfitrión; deja vacíos los campos que no correspondan. El archivo personal está ignorado por Git. `especialistasPermitidos` controla qué especialistas puede invocar el coordinador y cada agente tiene su propio `guardarEntregablesEnSesion`.
+```sh
+apm install pablotecat/ai-assisted-planning --target opencode
+node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
+```
+
+APM instala los agentes y skills. El segundo comando configura sus plugins, herramientas y dependencias npm para OpenCode; no necesitas descargar este repositorio. Después abre o reinicia OpenCode en esa misma carpeta y llama a `agente-planificador`.
+
+**Actualizar:** desde la misma carpeta, ejecuta:
+
+```sh
+apm update --yes --target opencode
+node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
+```
+
+Tus ajustes se conservan en `.opencode/agent-settings.json`. Puedes dejar ese archivo como está: el agente pedirá las rutas de código o documentos cuando las necesite.
+
+Para consultas de código, instala Codegraph e indexa el proyecto. Para convertir otros formatos de documentos, instala MarkItDown.
 
 ## Uso
 
