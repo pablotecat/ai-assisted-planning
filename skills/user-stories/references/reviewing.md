@@ -1,0 +1,15 @@
+# Review and repair
+
+1. Establish the beneficiary, goal, planning horizon, related items, stated constraints and acceptance evidence. Separate what was supplied from what you infer; qualify a recommendation if a missing fact would change it. **Done when:** the assumptions behind the diagnosis are visible.
+2. Apply the relevant checks below. For each material problem, give **symptom → consequence → smallest useful repair**. An unflagged check need not appear in the answer. **Done when:** every reported issue has a grounded consequence and proportionate remedy.
+3. Choose the shape of the change. For near-term oversized work, propose slices with independently demonstrable beneficiary outcomes that run end-to-end through the necessary system layers. Narrow by outcome, workflow, or scope rather than by UI-only or database-only work. Combine trivial or tightly dependent items for planning when separate scheduling adds no choice, retaining their individual requested changes for verification; expose dependencies or order-sensitive estimates that remain. Timebox a separate investigation if technical uncertainty blocks estimation. Keep distant work as an epic until a finer decision is due. **Done when:** each proposed slice can deliver something usable, or the reason to combine, investigate, or defer is explicit.
+4. Give a verdict (usable now, needs discussion, or needs repair), material findings, supported replacement wording or slices, and the few questions required for adoption. Treat rewrites as proposals; preserve the requested scope until its owner decides otherwise. **Done when:** the requester can identify a next decision without mistaking an inference for an agreement.
+
+## Checks
+
+- **Value:** A technology or activity alone does not reveal the purchaser or user benefit. Ask for the outcome, or keep an implementation task under its real goal. Purchaser and operator benefits count even when end users do not see them.
+- **Independence:** Coupled items obscure priority or make estimates depend on order. Combine if still schedulable, find another outcome boundary, or state the dependency and conditional estimate.
+- **Size and estimatability:** Several outcomes or excessive near-term work call for narrower end-to-end slices. Tiny changes with shared setup can travel together. Ask a stakeholder for missing domain facts; send technical uncertainty to a bounded investigation. Size is relative to the team and horizon.
+- **Closure:** An ongoing activity with no recognizable finish needs a demonstrable goal within the team's workable size.
+- **Negotiability:** Speculative solution detail forecloses choices; retain settled constraints and move unsettled details into questions. In an established product, a specific UI change may itself be the real outcome. If changing learned navigation is risky, see [context](context.md#early-interface-risk).
+- **Testability:** Vague terms need observable conditions and, where relevant, a threshold chosen by the product decision-maker. Use [confirmation](confirmation.md) to distinguish suggested checks from agreed ones.

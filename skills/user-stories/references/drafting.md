@@ -1,0 +1,8 @@
+# Draft from an idea
+
+1. Trace the request to evidence: who uses or purchases the product, in what situation, what outcome they seek, and why. Distinguish direct user evidence, purchaser or proxy reports, and your own inferences. **Done when:** each substantive claim has a supplied basis or an explicit unknown.
+2. Ask focused, open questions about the current workflow and desired outcome when the role or goal is unclear. Use a specific role when known; distinguish hands-on users from purchasers. Treat proxy accounts as useful leads, seeking user feedback where feasible; route competing goals to the person accountable for product value. **Done when:** the goal has a credible basis, or its missing decision and owner are named.
+3. State a short candidate for each distinct meaningful outcome. Use a template or value clause only if it clarifies the goal. Label inferred scope or benefit provisional; keep speculative UI and implementation choices as questions. If the role and outcome cannot be grounded, leave the candidate pending. **Done when:** each candidate is comprehensible in plain language and its consequential assumptions are visible.
+4. Match detail to timing: a near-term story needs enough scope for the next planning or delivery conversation; distant work can remain a broad goal. Ask when a decision is needed if the horizon is unknown. **Done when:** detail serves the next actual decision rather than a hypothetical one.
+
+Return the candidate (or reason it is pending), intended value and its provenance when uncertain, relevant known constraints, and the few questions the accountable person must answer. If useful, route candidate acceptance evidence through [confirmation](confirmation.md), labeling it as proposed.

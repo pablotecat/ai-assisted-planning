@@ -1,0 +1,11 @@
+node_modules/
+package-lock.json
+bun.lock
+agent-settings.json
+agent-settings.json.*.tmp
+agent-settings.json.lock/
+.env
+.env.*
+*.log
+/data/
+/informes-agente/

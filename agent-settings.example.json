@@ -1,0 +1,16 @@
+{
+  "proyecto": {
+    "repositorio": "",
+    "referencia": "",
+    "carpetasDocumentales": []
+  },
+  "agentes": {
+    "planificador": { "maxRefinadoresParalelos": 10, "guardarEntregablesEnSesion": true },
+    "refinamiento": { "maxConsultasParalelas": 2, "guardarEntregablesEnSesion": true },
+    "coordinador": { "maxRepreguntasEspecialistas": 2, "especialistasPermitidos": ["codigo", "documentacion"], "guardarEntregablesEnSesion": true },
+    "codigo": { "guardarEntregablesEnSesion": true },
+    "documentacion": { "guardarEntregablesEnSesion": true },
+    "revisor": { "guardarEntregablesEnSesion": true }
+  },
+  "sesiones": { "carpetaRaiz": "informes-agente/sesiones" }
+}
