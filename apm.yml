@@ -1,0 +1,8 @@
+name: ai-assisted-planning
+version: 0.1.0
+description: Agentes de planificación e investigación para OpenCode.
+targets:
+  - opencode
+includes: auto
+dependencies:
+  apm: []
