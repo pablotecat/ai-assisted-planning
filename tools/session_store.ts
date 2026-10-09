@@ -9,11 +9,13 @@ let resolver: Resolver | undefined
 export function setSessionResolver(value: Resolver) { resolver = value }
 
 const agentNames: Record<string, AgentName> = {
+  "agente-arquitecto": "arquitecto",
   "agente-planificador": "planificador", "agente-refinamiento": "refinamiento",
   "agente-coordinador": "coordinador", "agente-codigo": "codigo", "agente-documentacion": "documentacion",
   "agente-revisor": "revisor",
 }
 const childOf: Record<AgentName, AgentName[]> = {
+  arquitecto: [],
   planificador: [], refinamiento: ["planificador"], coordinador: ["refinamiento"],
   codigo: ["coordinador"], documentacion: ["coordinador", "documentacion"],
   revisor: ["planificador", "refinamiento", "coordinador", "codigo", "documentacion"],
@@ -55,7 +57,8 @@ function rootName(created: number, agent: AgentName, title: string) {
   const date = new Date(created)
   if (!Number.isFinite(date.getTime())) throw new Error("Fecha de sesión inválida")
   const stamp = date.toISOString().slice(0, 16).replace("T", "_").replace(":", "")
-  return `${stamp}__${agent === "planificador" ? "planificacion" : "consulta"}__${slug(title)}`
+  const kind = agent === "planificador" ? "planificacion" : agent === "arquitecto" ? "arquitectura" : "consulta"
+  return `${stamp}__${kind}__${slug(title)}`
 }
 async function chain(id: string, messageID: string | undefined, get: Resolver) {
   const nodes: Identity[] = []

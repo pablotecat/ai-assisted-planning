@@ -5,6 +5,7 @@
     "carpetasDocumentales": []
   },
   "agentes": {
+    "arquitecto": { "maxIntentosRevision": 3, "guardarEntregablesEnSesion": true },
     "planificador": { "maxRefinadoresParalelos": 10, "guardarEntregablesEnSesion": true },
     "refinamiento": { "maxConsultasParalelas": 2, "guardarEntregablesEnSesion": true },
     "coordinador": { "maxRepreguntasEspecialistas": 2, "especialistasPermitidos": ["codigo", "documentacion"], "guardarEntregablesEnSesion": true },
