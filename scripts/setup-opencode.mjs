@@ -21,6 +21,7 @@ async function json(path) {
 const configDir = join(host, ".opencode")
 await mkdir(configDir, { recursive: true })
 for (const dir of ["plugin", "tools"]) await cp(join(source, dir), join(configDir, dir), { recursive: true })
+await cp(join(source, "flujo-arquitectura.md"), join(configDir, "flujo-arquitectura.md"))
 await cp(join(source, "agent-settings.example.json"), join(configDir, "agent-settings.example.json"))
 await cp(join(source, "agent-settings.example.json"), join(configDir, "agent-settings.json"), { force: false })
 

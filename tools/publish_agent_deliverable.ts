@@ -10,7 +10,7 @@ export default tool({
     decisiones: tool.schema.array(tool.schema.string()).optional().describe("Decisiones relevantes para el índice de sesión"),
   },
   async execute(args, context) {
-    if (!["agente-refinamiento", "agente-coordinador", "agente-codigo", "agente-documentacion"].includes(context.agent)) throw new Error("Agente no autorizado")
+    if (!["agente-arquitecto", "agente-refinamiento", "agente-coordinador", "agente-codigo", "agente-documentacion"].includes(context.agent)) throw new Error("Agente no autorizado")
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: args.nombre, files: { [args.nombre]: args.contenido },
       sources: args.fuentes, decisions: args.decisiones }))
