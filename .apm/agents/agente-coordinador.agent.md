@@ -7,6 +7,7 @@ permission:
     "*": deny
     agente-codigo: allow
     agente-documentacion: allow
+    agente-revisor: allow
   question: allow
   coordinator_defaults: allow
   agent_settings: allow

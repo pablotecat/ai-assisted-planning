@@ -11,6 +11,9 @@ permission:
   question: allow
   agent_settings: allow
   publish_agent_deliverable: allow
+  task:
+    "*": deny
+    agente-revisor: allow
   external_directory: allow
   doom_loop: allow
   edit: deny

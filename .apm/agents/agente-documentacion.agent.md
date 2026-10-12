@@ -13,6 +13,7 @@ permission:
   task:
     "*": deny
     agente-documentacion: allow
+    agente-revisor: allow
   bash:
     "*": deny
     "markitdown *": allow

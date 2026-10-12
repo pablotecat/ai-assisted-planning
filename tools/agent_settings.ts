@@ -21,6 +21,7 @@ const settingsSchema = tool.schema.object({
   agentes: tool.schema.object({
     arquitecto: saved.extend({ maxIntentosRevision: tool.schema.number().int().positive() })
       .default({ maxIntentosRevision: 3, guardarEntregablesEnSesion: true }),
+    "arquitecto-test": saved.default({ guardarEntregablesEnSesion: true }),
     planificador: saved.extend({ maxRefinadoresParalelos: tool.schema.number().int().positive() }),
     refinamiento: saved.extend({ maxConsultasParalelas: tool.schema.number().int().positive() }),
     coordinador: saved.extend({ maxRepreguntasEspecialistas: tool.schema.number().int().min(0), especialistasPermitidos: permitted }),

@@ -22,16 +22,18 @@ test("configuración inicial y límites de proyecto", async () => {
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
-test("arquitecto: valores por defecto compatibles y límites de revisión válidos", async () => {
+test("arquitecto y Test: valores por defecto compatibles y límites de revisión válidos", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-architecture-settings-"))
   const path = join(dir, "settings.json")
   try {
     const initial = await readAgentSettings(path)
     assert.deepEqual(initial.agentes.arquitecto, { maxIntentosRevision: 3, guardarEntregablesEnSesion: true })
-    const { arquitecto, ...legacyAgents } = initial.agentes
+    assert.deepEqual(initial.agentes["arquitecto-test"], { guardarEntregablesEnSesion: true })
+    const { arquitecto, "arquitecto-test": testSettings, ...legacyAgents } = initial.agentes
     const legacy = JSON.stringify({ ...initial, agentes: legacyAgents })
     await writeFile(path, legacy)
     assert.deepEqual((await readAgentSettings(path)).agentes.arquitecto, arquitecto)
+    assert.deepEqual((await readAgentSettings(path)).agentes["arquitecto-test"], testSettings)
     assert.equal(await readFile(path, "utf8"), legacy)
     await writeFile(path, JSON.stringify({ ...initial, agentes: { ...initial.agentes,
       arquitecto: { maxIntentosRevision: 1, guardarEntregablesEnSesion: false } } }))
@@ -44,6 +46,12 @@ test("arquitecto: valores por defecto compatibles y límites de revisión válid
     }
     await writeFile(path, JSON.stringify({ ...initial, agentes: { ...initial.agentes,
       arquitecto: { ...arquitecto, guardarEntregablesEnSesion: "true" } } }))
+    await assert.rejects(readAgentSettings(path))
+    await writeFile(path, JSON.stringify({ ...initial, agentes: { ...initial.agentes,
+      "arquitecto-test": { guardarEntregablesEnSesion: false } } }))
+    assert.equal((await readAgentSettings(path)).agentes["arquitecto-test"].guardarEntregablesEnSesion, false)
+    await writeFile(path, JSON.stringify({ ...initial, agentes: { ...initial.agentes,
+      "arquitecto-test": { guardarEntregablesEnSesion: "true" } } }))
     await assert.rejects(readAgentSettings(path))
   } finally { await rm(dir, { recursive: true, force: true }) }
 })

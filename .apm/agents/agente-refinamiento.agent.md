@@ -11,6 +11,7 @@ permission:
   task:
     "*": deny
     agente-coordinador: allow
+    agente-revisor: allow
   refinement_settings: allow
   skill:
     user-stories: allow
