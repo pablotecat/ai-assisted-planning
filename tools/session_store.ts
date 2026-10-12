@@ -10,15 +10,17 @@ export function setSessionResolver(value: Resolver) { resolver = value }
 
 const agentNames: Record<string, AgentName> = {
   "agente-arquitecto": "arquitecto",
+  "agente-arquitecto-test": "arquitecto-test",
   "agente-planificador": "planificador", "agente-refinamiento": "refinamiento",
   "agente-coordinador": "coordinador", "agente-codigo": "codigo", "agente-documentacion": "documentacion",
   "agente-revisor": "revisor",
 }
 const childOf: Record<AgentName, AgentName[]> = {
   arquitecto: [],
+  "arquitecto-test": ["arquitecto"],
   planificador: [], refinamiento: ["planificador"], coordinador: ["refinamiento"],
   codigo: ["coordinador"], documentacion: ["coordinador", "documentacion"],
-  revisor: ["planificador", "refinamiento", "coordinador", "codigo", "documentacion"],
+  revisor: Object.values(agentNames).filter((name) => name !== "revisor"),
 }
 type Entry = { parent?: string; agent: AgentName; folder: string }
 type State = { root: string; entries: Record<string, Entry>; deliveries: string[]; sources: string[]; decisions: string[]; keys: string[] }
@@ -76,6 +78,7 @@ async function chain(id: string, messageID: string | undefined, get: Resolver) {
     current = node.parentID
   }
   nodes.reverse()
+  if (nodes[0].agent === "agente-arquitecto-test") throw new Error("Test requiere delegación de agente-arquitecto")
   for (let i = 1; i < nodes.length; i++) {
     if (!childOf[agentNames[nodes[i].agent]].includes(agentNames[nodes[i - 1].agent]))
       throw new Error("Delegación no autorizada")
