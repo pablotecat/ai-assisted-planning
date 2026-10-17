@@ -38,7 +38,7 @@ test("arquitecto publica planes versionados y respeta su interruptor de guardado
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
-test("los tres gestores pueden recibir fuentes Jira de Documentación y respetan especialistasPermitidos", async () => {
+test("Documentación solo publica delegaciones del Coordinador o de Documentación", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-jira-delegation-"))
   const base = { title: "Fuentes Jira", created: Date.UTC(2026, 9, 17), directory: dir }
   const managers = ["coordinador", "planificador", "arquitecto"]
@@ -49,24 +49,33 @@ test("los tres gestores pueden recibir fuentes Jira de Documentación y respetan
   }
   nodes.codigo = { ...base, id: "codigo", agent: "agente-codigo" }
   nodes.wrongDocs = { ...base, id: "wrongDocs", parentID: "codigo", agent: "agente-documentacion" }
+  nodes.childDocs = { ...base, id: "childDocs", parentID: "coordinador-docs", agent: "agente-documentacion" }
   const settingsPath = join(dir, "settings.json")
   const opts = { root: join(dir, "sesiones"), settingsPath, get: async (id: string) => nodes[id] }
   const input = { agent: "agente-documentacion", topic: "APP-1", files: { "fuentes-jira.md": "APP-1: texto íntegro" },
     sources: ["https://example.atlassian.net/browse/APP-1"] }
   try {
     for (const name of managers) {
+      if (name !== "coordinador") {
+        await assert.rejects(publishSession({ ...input, sessionID: `${name}-docs` }, opts), /Delegación no autorizada/)
+        continue
+      }
       const result = await publishSession({ ...input, sessionID: `${name}-docs` }, opts)
       assert.equal(result.guardado, true)
       if (!result.guardado) continue
       assert.equal(await readFile(result.rutas["fuentes-jira.md"], "utf8"), input.files["fuentes-jira.md"])
       assert.equal(dirname(dirname(result.rutas["fuentes-jira.md"])), join(result.sesion, `01-${name}`))
     }
+    const child = await publishSession({ ...input, sessionID: "childDocs" }, opts)
+    assert.equal(child.guardado, true)
+    if (child.guardado) assert.equal(await readFile(child.rutas["fuentes-jira.md"], "utf8"), input.files["fuentes-jira.md"])
     await assert.rejects(publishSession({ ...input, sessionID: "wrongDocs" }, opts), /Delegación no autorizada/)
     const settings = await readAgentSettings(settingsPath)
     settings.agentes.coordinador.especialistasPermitidos = ["codigo"]
     await writeFile(settingsPath, JSON.stringify(settings))
     for (const name of managers)
-      await assert.rejects(publishSession({ ...input, sessionID: `${name}-docs` }, opts), /Especialista deshabilitado/)
+      await assert.rejects(publishSession({ ...input, sessionID: `${name}-docs` }, opts),
+        name === "coordinador" ? /Especialista deshabilitado/ : /Delegación no autorizada/)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 

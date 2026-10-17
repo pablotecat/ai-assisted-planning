@@ -30,6 +30,38 @@ test("adaptador OpenCode usa identidades de sesión y bloquea otras escrituras",
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
+test("Planificador y Arquitecto no invocan Documentación, tampoco al reanudar una sesión", async () => {
+  const base = { title: "Consulta", created: Date.now(), directory: "proyecto" }
+  const nodes: Record<string, Identity> = {
+    plan: { ...base, id: "plan", agent: "agente-planificador" },
+    architect: { ...base, id: "architect", agent: "agente-arquitecto" },
+    "plan-docs": { ...base, id: "plan-docs", parentID: "plan", agent: "agente-documentacion" },
+    "architect-docs": { ...base, id: "architect-docs", parentID: "architect", agent: "agente-documentacion" },
+  }
+  const client = {
+    session: {
+      get: async ({ path }: { path: { id: string } }) => {
+        const node = nodes[path.id]
+        return { data: { ...node, time: { created: node.created } } }
+      },
+      messages: async ({ path }: { path: { id: string } }) => ({ data: [
+        { info: { role: "assistant", agent: nodes[path.id].agent } },
+      ] }),
+    },
+  }
+  const hooks = await plugin({ client, directory: "proyecto" } as never)
+  const before = hooks["tool.execute.before"]!
+  for (const sessionID of ["plan", "architect"]) {
+    await assert.rejects(before({ tool: "task", sessionID, callID: "delegate" },
+      { args: { subagent_type: "agente-documentacion" } }), /no pueden delegar/)
+    await assert.rejects(before({ tool: "task", sessionID, callID: "resume" },
+      { args: { subagent_type: "agente-revisor", task_id: `${sessionID}-docs` } }), /no pueden delegar/)
+    await before({ tool: "task", sessionID, callID: "review" }, { args: { subagent_type: "agente-revisor" } })
+    for (const tool of ["atlassian_searchJiraIssuesUsingJql", "atlassian_getJiraIssue", "atlassian_executeRead"])
+      await before({ tool, sessionID, callID: tool }, { args: {} })
+  }
+})
+
 test("Test solo trabaja por encargo del arquitecto, también al reanudar sesiones", async () => {
   const base = { title: "Tests UI", created: Date.now(), directory: "proyecto" }
   const nodes: Record<string, Identity> = {
