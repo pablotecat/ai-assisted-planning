@@ -6,7 +6,7 @@ Agentes para investigar código y documentación local, refinar historias desde 
 |---|---|
 | `agente-codigo` | Investiga un workspace indexado con Codegraph. |
 | `agente-documentacion` | Investiga historias Jira y documentos locales y cita sus fuentes. |
-| `agente-coordinador` | Contrasta investigación de código y documentación. |
+| `agente-coordinador` | Consulta Jira directamente y contrasta investigación de código y documentación. |
 | `agente-planificador` | Copia requisitos, coordina refinadores y publica historias. |
 | `agente-refinamiento` | Redacta borradores trazables por historia. |
 | `agente-arquitecto` | Lee historias locales revisadas, prepara encargos técnicos e integra bloques y bloqueos. |
@@ -35,7 +35,7 @@ Tus ajustes se conservan en `.opencode/agent-settings.json`. Puedes dejar ese ar
 
 Para consultas de código, instala Codegraph e indexa el proyecto. Para convertir otros formatos de documentos, instala MarkItDown.
 
-Para consultar Jira, conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/supported-tools/) en [OpenCode](https://opencode.ai/docs/mcp-servers/) con el nombre `atlassian`. Refinamiento, Documentación y Revisor tienen permisos `atlassian_get*`, `atlassian_list*`, `atlassian_search*`, `atlassian_lookup*`, `atlassian_discover` y `atlassian_executeRead` para consultas de solo lectura. Coordinador, Planificador y Arquitecto encargan sus consultas Jira a Documentación, conforme a `agentes.coordinador.especialistasPermitidos`. La conexión y autenticación se configuran en OpenCode; `agent-settings.json` conserva la clave del proyecto.
+Para consultar Jira, conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/supported-tools/) en [OpenCode](https://opencode.ai/docs/mcp-servers/) con el nombre `atlassian`. Coordinador, Arquitecto, Refinamiento, Documentación y Revisor tienen permisos `atlassian_get*`, `atlassian_list*`, `atlassian_search*`, `atlassian_lookup*`, `atlassian_discover` y `atlassian_executeRead` para consultas directas de solo lectura. El acceso directo del Coordinador y del Arquitecto es independiente de `agentes.coordinador.especialistasPermitidos`, que limita las delegaciones. El Planificador encarga sus consultas Jira a Documentación. La conexión y autenticación se configuran en OpenCode; `agent-settings.json` conserva la clave del proyecto.
 
 Coordinador, Planificador y Arquitecto comparten `agent_settings`: pueden leer el JSON y completar, tras confirmación, los campos vacíos `proyecto.claveProyectoJira`, `proyecto.repositorio`, `proyecto.referencia` y `proyecto.carpetasDocumentales`. El guardado conserva los valores ya informados. Las herramientas específicas son exclusivas de su agente:
 
