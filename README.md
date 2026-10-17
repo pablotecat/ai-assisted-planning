@@ -1,11 +1,11 @@
 # Planificación asistida por agentes
 
-Agentes para investigar código y documentación local, refinar requisitos aportados por el usuario, preparar su planificación técnica y revisar las entregas. Esta base no depende de un gestor de tareas: la integración con fuentes adicionales podrá añadirse más adelante.
+Agentes para investigar código y documentación local, refinar historias desde Jira o fuentes aportadas por el usuario, preparar su planificación técnica y revisar las entregas.
 
 | Agente | Responsabilidad |
 |---|---|
 | `agente-codigo` | Investiga un workspace indexado con Codegraph. |
-| `agente-documentacion` | Analiza documentos locales y cita sus fuentes. |
+| `agente-documentacion` | Investiga historias Jira y documentos locales y cita sus fuentes. |
 | `agente-coordinador` | Contrasta investigación de código y documentación. |
 | `agente-planificador` | Copia requisitos, coordina refinadores y publica historias. |
 | `agente-refinamiento` | Redacta borradores trazables por historia. |
@@ -31,13 +31,25 @@ apm update --yes --target opencode
 node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
 ```
 
-Tus ajustes se conservan en `.opencode/agent-settings.json`. Puedes dejar ese archivo como está: el agente pedirá las rutas de código o documentos cuando las necesite.
+Tus ajustes se conservan en `.opencode/agent-settings.json`. Puedes dejar ese archivo como está: el agente pedirá la clave del proyecto Jira o las rutas de código y documentos cuando las necesite.
 
 Para consultas de código, instala Codegraph e indexa el proyecto. Para convertir otros formatos de documentos, instala MarkItDown.
 
+Para consultar Jira, conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/supported-tools/) en [OpenCode](https://opencode.ai/docs/mcp-servers/) con el nombre `atlassian`. Refinamiento, Documentación y Revisor tienen permisos `atlassian_get*`, `atlassian_list*`, `atlassian_search*`, `atlassian_lookup*`, `atlassian_discover` y `atlassian_executeRead` para consultas de solo lectura. Coordinador, Planificador y Arquitecto encargan sus consultas Jira a Documentación, conforme a `agentes.coordinador.especialistasPermitidos`. La conexión y autenticación se configuran en OpenCode; `agent-settings.json` conserva la clave del proyecto.
+
+Coordinador, Planificador y Arquitecto comparten `agent_settings`: pueden leer el JSON y completar, tras confirmación, los campos vacíos `proyecto.claveProyectoJira`, `proyecto.repositorio`, `proyecto.referencia` y `proyecto.carpetasDocumentales`. El guardado conserva los valores ya informados. Las herramientas específicas son exclusivas de su agente:
+
+| Agente | Herramienta propia | Ajustes en `.opencode/agent-settings.json` |
+|---|---|---|
+| Coordinador | `coordinator_defaults` | `agentes.coordinador` |
+| Planificador | `planning_settings` | `agentes.planificador` |
+| Arquitecto | `architecture_settings` | `agentes.arquitecto` |
+
 ## Uso
 
-Entrega a `agente-planificador` texto o rutas de documentos con los requisitos y el alcance a refinar. El planificador conserva copias en `Originales/`, delega borradores, publica historias e incidencias en `entrega/` y pide al revisor un `sanity-check.md` de esa versión. Las correcciones se publican en `entrega-02/`, etc. Los entregables se guardan en `sesiones.carpetaRaiz` bajo la raíz del proyecto anfitrión (por defecto `informes-agente/sesiones/`). Puedes invocar directamente al coordinador o a los especialistas para consultas independientes.
+Por defecto, `agente-planificador` encarga a Documentación buscar las historias en el proyecto Jira configurado en `proyecto.claveProyectoJira` de `.opencode/agent-settings.json`. Si está vacío, pide la clave del proyecto al usuario y la guarda para futuros encargos. Puedes indicar claves de historias, un filtro o un sprint para acotar la revisión; un proyecto distinto indicado para un encargo se usa en ese encargo. Las configuraciones anteriores sin este campo se leen como proyecto pendiente de indicar. Documentación recupera el contenido íntegro antes de que el planificador publique los originales y delegue el refinamiento.
+
+También puedes aportar texto, archivos u otro formato y pedir explícitamente que revise esas historias: esa petición tiene prioridad y puede ejecutarse sin configurar Jira. El planificador conserva copias en `Originales/`, delega borradores, publica historias e incidencias en `entrega/` y pide al revisor un `sanity-check.md` de esa versión. Las correcciones se publican en `entrega-02/`, etc. Los entregables se guardan en `sesiones.carpetaRaiz` bajo la raíz del proyecto anfitrión (por defecto `informes-agente/sesiones/`). Puedes invocar directamente al coordinador o a los especialistas para consultas independientes.
 
 Para el flujo complementario, selecciona `agente-arquitecto` y facilita rutas de historias locales refinadas y revisadas. Conserva los identificadores de las historias; si no los tienen, asigna etiquetas locales estables. Para Test, aporta también la ruta de su proyecto y la referencia de código que deba analizarse cuando importe. Puedes indicar una carpeta de conocimiento con convenciones, nomenclatura, buenas prácticas y peculiaridades del proyecto: en esta iteración es complementaria, se consulta en solo lectura y su ausencia no bloquea por sí sola el análisis. Si falta una información indispensable, queda pendiente el trabajo afectado. Su escritura se definirá más adelante.
 

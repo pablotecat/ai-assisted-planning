@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises"
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path"
-import { readAgentSettings, sessionRoot, type AgentName } from "./agent_settings.ts"
+import { projectManagers, readAgentSettings, sessionRoot, type AgentName } from "./agent_settings.ts"
 
 export type Identity = { id: string; parentID?: string; agent: string; title: string; created: number; directory: string }
 export type Resolver = (id: string, messageID?: string) => Promise<Identity>
@@ -19,7 +19,7 @@ const childOf: Record<AgentName, AgentName[]> = {
   arquitecto: [],
   "arquitecto-test": ["arquitecto"],
   planificador: [], refinamiento: ["planificador"], coordinador: ["refinamiento"],
-  codigo: ["coordinador"], documentacion: ["coordinador", "documentacion"],
+  codigo: ["coordinador"], documentacion: [...projectManagers.map((name) => agentNames[name]), "documentacion"],
   revisor: Object.values(agentNames).filter((name) => name !== "revisor"),
 }
 type Entry = { parent?: string; agent: AgentName; folder: string }
@@ -156,7 +156,7 @@ export async function publishSession(input: {
   if (!settings.agentes[agentNames[input.agent]].guardarEntregablesEnSesion) return { guardado: false }
   if (input.agent === "agente-codigo" && !settings.agentes.coordinador.especialistasPermitidos.includes("codigo") && nodes.length > 1)
     throw new Error("Especialista deshabilitado")
-  if (input.agent === "agente-documentacion" && !settings.agentes.coordinador.especialistasPermitidos.includes("documentacion") && nodes.some((n) => n.agent === "agente-coordinador"))
+  if (input.agent === "agente-documentacion" && !settings.agentes.coordinador.especialistasPermitidos.includes("documentacion") && nodes.some((n) => projectManagers.includes(n.agent)))
     throw new Error("Especialista deshabilitado")
 
   const root = options.root ?? sessionRoot(settings)

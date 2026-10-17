@@ -9,6 +9,7 @@ const examplePath = join(dirname(settingsPath), "agent-settings.example.json")
 const hostRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const nonEmpty = tool.schema.string().trim().min(1)
 const project = tool.schema.object({
+  claveProyectoJira: tool.schema.string().trim().default(""),
   repositorio: tool.schema.string().refine((s) => !s || isAbsolute(s)),
   referencia: tool.schema.string(),
   carpetasDocumentales: tool.schema.array(nonEmpty.refine(isAbsolute)),
@@ -34,6 +35,7 @@ const settingsSchema = tool.schema.object({
 
 export type AgentSettings = ReturnType<typeof settingsSchema.parse>
 export type AgentName = keyof AgentSettings["agentes"]
+export const projectManagers = ["agente-coordinador", "agente-planificador", "agente-arquitecto"]
 
 export async function readAgentSettings(path = settingsPath): Promise<AgentSettings> {
   try {
@@ -83,12 +85,18 @@ export function sessionRoot(settings: AgentSettings, root = hostRoot) {
   return resolve(root, settings.sesiones.carpetaRaiz)
 }
 
+export async function manageAgentSettings(agent: string, action: "read" | "saveMissing",
+  values?: Partial<AgentSettings["proyecto"]>, path?: string) {
+  if (![...projectManagers, "agente-refinamiento", "agente-codigo", "agente-documentacion"].includes(agent)) throw new Error("Agente no autorizado")
+  if (action === "saveMissing" && (!projectManagers.includes(agent) || !values))
+    throw new Error("Solo Coordinador, Planificador y Arquitecto guardan datos confirmados; se requieren valores")
+  return action === "read" ? readAgentSettings(path) : saveMissingProject(values!, path)
+}
+
 export default tool({
   description: "Lee la configuración común del proyecto y sus agentes; tras confirmación guarda los datos de proyecto aún vacíos.",
   args: { action: tool.schema.enum(["read", "saveMissing"]), values: project.partial().strict().optional() },
   async execute(args, context) {
-    if (!["agente-planificador", "agente-refinamiento", "agente-coordinador", "agente-codigo", "agente-documentacion"].includes(context.agent)) throw new Error("Agente no autorizado")
-    if (args.action === "saveMissing" && (context.agent !== "agente-coordinador" || !args.values)) throw new Error("Solo el coordinador guarda datos confirmados")
-    return JSON.stringify(args.action === "read" ? await readAgentSettings() : await saveMissingProject(args.values!))
+    return JSON.stringify(await manageAgentSettings(context.agent, args.action, args.values))
   },
 })

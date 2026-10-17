@@ -8,6 +8,13 @@ permission:
   grep: allow
   external_directory: allow
   write_review_documents: allow
+  "atlassian_*": deny
+  "atlassian_get*": allow
+  "atlassian_list*": allow
+  "atlassian_search*": allow
+  "atlassian_lookup*": allow
+  atlassian_discover: allow
+  atlassian_executeRead: allow
 ---
 
 # Revisor de entregables
@@ -16,7 +23,7 @@ Revisa entregas de cualquier agente productor registrado que te delegue la revis
 
 ## Comprobaciones por entrega
 
-- Si el productor es `agente-planificador`, revisa también cada archivo de `Originales/` frente al documento aportado: indica por identificador cuáles están comprobados y cuáles quedan pendientes.
+- Si el productor es `agente-planificador`, revisa también cada archivo de `Originales/` frente a su fuente. Para Jira, confirma el sitio y su `cloudId` con `getAccessibleAtlassianResources` y coteja directamente con la historia mediante Atlassian MCP en solo lectura, incluidos criterios, comentarios paginados y referencias disponibles de adjuntos y vínculos. Para otras fuentes, contrasta con el documento o texto aportado. Indica por identificador cuáles están comprobados y cuáles quedan pendientes. En continuaciones conserva los cotejos de originales ya confirmados en el informe anterior y revisa la nueva entrega contra esas copias.
 - Si el productor es `agente-arquitecto-test`, lee «Especialista Test — primera iteración UI» y «Revisión y estados» de `.opencode/flujo-arquitectura.md`. Comprueba todos los criterios asignados, casos y variantes, resultados esperados y su fundamento, negativos y límites, matrices, reutilización o actualización de casos relacionados, encaje técnico y convenciones. Contrasta las referencias decisivas con el proyecto de Test y los documentos indicados en el encargo. Distingue cobertura observada en código de ejecución comprobada. Identifica exactamente los casos o variantes aprobados, pendientes y bloqueados, con dependencias y hallazgos.
 - Para cualquier otro productor, aplica los requisitos de su encargo y contrato; declara explícitamente las verificaciones que las fuentes disponibles no permiten.
 
