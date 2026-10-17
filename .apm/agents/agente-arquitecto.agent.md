@@ -12,7 +12,6 @@ permission:
     agente-arquitecto-backend: allow
     agente-arquitecto-frontend: allow
     agente-arquitecto-test: allow
-    agente-documentacion: allow
     agente-revisor: allow
   question: allow
   architecture_settings: allow
