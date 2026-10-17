@@ -37,7 +37,7 @@ export default tool({
         especialistasPermitidos: settings.agentes.coordinador.especialistasPermitidos,
         guardarEntregablesEnSesion: settings.agentes.coordinador.guardarEntregablesEnSesion,
       },
-      missing: Object.entries(project).filter(([, value]) => !value || (Array.isArray(value) && !value.length)).map(([key]) => key),
+      missing: Object.entries(project).filter(([key, value]) => key !== "claveProyectoJira" && (!value || (Array.isArray(value) && !value.length))).map(([key]) => key),
       branchDefaultSuggested: branch(project.repositorio), branchActual: branch(args.workspace ?? project.repositorio),
     })
   },

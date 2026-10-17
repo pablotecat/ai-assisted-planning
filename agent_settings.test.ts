@@ -3,22 +3,98 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
-import { readAgentSettings, saveMissingProject } from "./tools/agent_settings.ts"
+import { tool } from "@opencode-ai/plugin"
+import { manageAgentSettings, readAgentSettings, saveMissingProject } from "./tools/agent_settings.ts"
+import architectureSettings from "./tools/architecture_settings.ts"
+import coordinatorDefaults from "./tools/coordinator_defaults.ts"
+import planningTool, { planningSettings } from "./tools/planning_settings.ts"
 
 test("configuración inicial y límites de proyecto", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-settings-"))
   const path = join(dir, "settings.json")
   try {
     const initial = await readAgentSettings(path)
-    assert.deepEqual(initial.proyecto, { repositorio: "", referencia: "", carpetasDocumentales: [] })
+    assert.deepEqual(initial.proyecto, { claveProyectoJira: "", repositorio: "", referencia: "", carpetasDocumentales: [] })
     assert.deepEqual(initial.agentes.coordinador.especialistasPermitidos, ["codigo", "documentacion"])
-    await Promise.all([saveMissingProject({ referencia: "main" }, path), saveMissingProject({ carpetasDocumentales: [dir] }, path)])
+    await Promise.all([saveMissingProject({ referencia: "main" }, path), saveMissingProject({ carpetasDocumentales: [dir] }, path),
+      planningSettings("APP", path)])
     await saveMissingProject({ referencia: "otra" }, path)
     const saved = await readAgentSettings(path)
+    assert.equal(saved.proyecto.claveProyectoJira, "APP")
     assert.equal(saved.proyecto.referencia, "main")
     assert.deepEqual(saved.proyecto.carpetasDocumentales, [dir])
     await writeFile(path, JSON.stringify({ ...saved, proyecto: { ...saved.proyecto, sitioExterno: "valor" } }))
     await assert.rejects(readAgentSettings(path))
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})
+
+test("planificador guarda el proyecto Jira ausente y conserva configuraciones anteriores", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "planning-jira-settings-"))
+  const path = join(dir, "settings.json")
+  try {
+    const initial = await readAgentSettings(path)
+    const { claveProyectoJira, ...legacyProject } = initial.proyecto
+    initial.agentes.planificador.guardarEntregablesEnSesion = false
+    const legacy = JSON.stringify({ ...initial, proyecto: legacyProject })
+    await writeFile(path, legacy)
+    assert.deepEqual(await planningSettings(undefined, path), {
+      PROYECTO_JIRA: "", MAX_REFINADORES_PARALELOS: 10, guardarEntregablesEnSesion: false,
+    })
+    assert.equal(await readFile(path, "utf8"), legacy)
+    assert.equal((await planningSettings(" APP ", path)).PROYECTO_JIRA, "APP")
+    const saved = await readFile(path, "utf8")
+    assert.deepEqual(JSON.parse(saved), { ...initial, proyecto: { ...legacyProject, claveProyectoJira: "APP" } })
+    assert.equal((await planningSettings("OTRO", path)).PROYECTO_JIRA, "APP")
+    assert.equal(await readFile(path, "utf8"), saved)
+    await writeFile(path, JSON.stringify({ ...initial, proyecto: { ...legacyProject, claveProyectoJira: 123 } }))
+    await assert.rejects(readAgentSettings(path))
+  } finally { await rm(dir, { recursive: true, force: true }) }
+
+  const input = tool.schema.object(planningTool.args)
+  assert.deepEqual(input.parse({}), {})
+  assert.deepEqual(input.parse({ proyectoJira: " APP " }), { proyectoJira: "APP" })
+  for (const proyectoJira of ["", "   ", 123]) assert.throws(() => input.parse({ proyectoJira }))
+  await assert.rejects(planningTool.execute({ proyectoJira: "APP" }, { agent: "agente-refinamiento" } as never), /Solo agente-planificador/)
+})
+
+test("Coordinador, Planificador y Arquitecto comparten lectura y guardado de datos de proyecto vacíos", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "planning-project-managers-"))
+  const values = { claveProyectoJira: "APP", repositorio: dir, referencia: "main", carpetasDocumentales: [dir] }
+  try {
+    for (const agent of ["agente-coordinador", "agente-planificador", "agente-arquitecto"]) {
+      const path = join(dir, `${agent}.json`)
+      const initial = await manageAgentSettings(agent, "read", undefined, path)
+      assert.equal(initial.proyecto.claveProyectoJira, "")
+      const saved = await manageAgentSettings(agent, "saveMissing", values, path)
+      assert.deepEqual(saved.proyecto, values)
+      assert.deepEqual(saved.agentes, initial.agentes)
+      assert.deepEqual(saved.sesiones, initial.sesiones)
+      const content = await readFile(path, "utf8")
+      await manageAgentSettings(agent, "saveMissing", { claveProyectoJira: "OTRO", repositorio: join(dir, "otro"),
+        referencia: "otra", carpetasDocumentales: [join(dir, "otros-docs")] }, path)
+      assert.equal(await readFile(path, "utf8"), content)
+      await assert.rejects(manageAgentSettings(agent, "saveMissing", undefined, path), /se requieren valores/)
+      await assert.rejects(manageAgentSettings(agent, "saveMissing", { agentes: {} } as never, path))
+      assert.equal(await readFile(path, "utf8"), content)
+      await assert.rejects(coordinatorDefaults.execute({ action: "saveMissing" }, { agent } as never),
+        agent === "agente-coordinador" ? /Faltan valores confirmados/ : /Solo agente-coordinador/)
+      if (agent !== "agente-planificador")
+        await assert.rejects(planningTool.execute({}, { agent } as never), /Solo agente-planificador/)
+      if (agent !== "agente-arquitecto")
+        await assert.rejects(architectureSettings.execute({}, { agent } as never), /Solo agente-arquitecto/)
+    }
+    const path = join(dir, "agente-coordinador.json")
+    const content = await readFile(path, "utf8")
+    for (const agent of ["agente-refinamiento", "agente-codigo", "agente-documentacion"]) {
+      assert.deepEqual((await manageAgentSettings(agent, "read", undefined, path)).proyecto, values)
+      await assert.rejects(manageAgentSettings(agent, "saveMissing", { referencia: "otra" }, path), /Solo Coordinador/)
+      await assert.rejects(coordinatorDefaults.execute({ action: "read" }, { agent } as never), /Solo agente-coordinador/)
+    }
+    for (const agent of ["agente-arquitecto-test", "agente-revisor", "build"]) {
+      await assert.rejects(manageAgentSettings(agent, "read", undefined, path), /no autorizado/)
+      await assert.rejects(manageAgentSettings(agent, "saveMissing", values, path), /no autorizado/)
+    }
+    assert.equal(await readFile(path, "utf8"), content)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 

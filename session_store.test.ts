@@ -38,6 +38,38 @@ test("arquitecto publica planes versionados y respeta su interruptor de guardado
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
+test("los tres gestores pueden recibir fuentes Jira de Documentación y respetan especialistasPermitidos", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "planning-jira-delegation-"))
+  const base = { title: "Fuentes Jira", created: Date.UTC(2026, 9, 17), directory: dir }
+  const managers = ["coordinador", "planificador", "arquitecto"]
+  const nodes: Record<string, Identity> = {}
+  for (const name of managers) {
+    nodes[name] = { ...base, id: name, agent: `agente-${name}` }
+    nodes[`${name}-docs`] = { ...base, id: `${name}-docs`, parentID: name, agent: "agente-documentacion" }
+  }
+  nodes.codigo = { ...base, id: "codigo", agent: "agente-codigo" }
+  nodes.wrongDocs = { ...base, id: "wrongDocs", parentID: "codigo", agent: "agente-documentacion" }
+  const settingsPath = join(dir, "settings.json")
+  const opts = { root: join(dir, "sesiones"), settingsPath, get: async (id: string) => nodes[id] }
+  const input = { agent: "agente-documentacion", topic: "APP-1", files: { "fuentes-jira.md": "APP-1: texto íntegro" },
+    sources: ["https://example.atlassian.net/browse/APP-1"] }
+  try {
+    for (const name of managers) {
+      const result = await publishSession({ ...input, sessionID: `${name}-docs` }, opts)
+      assert.equal(result.guardado, true)
+      if (!result.guardado) continue
+      assert.equal(await readFile(result.rutas["fuentes-jira.md"], "utf8"), input.files["fuentes-jira.md"])
+      assert.equal(dirname(dirname(result.rutas["fuentes-jira.md"])), join(result.sesion, `01-${name}`))
+    }
+    await assert.rejects(publishSession({ ...input, sessionID: "wrongDocs" }, opts), /Delegación no autorizada/)
+    const settings = await readAgentSettings(settingsPath)
+    settings.agentes.coordinador.especialistasPermitidos = ["codigo"]
+    await writeFile(settingsPath, JSON.stringify(settings))
+    for (const name of managers)
+      await assert.rejects(publishSession({ ...input, sessionID: `${name}-docs` }, opts), /Especialista deshabilitado/)
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})
+
 test("Arquitecto → Test → Revisor conserva versiones y revisa el archivo exacto del productor", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-test-flow-"))
   const base = { title: "Historia UI", created: Date.UTC(2026, 9, 12), directory: dir }

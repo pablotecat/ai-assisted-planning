@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { readAgentSettings } from "../tools/agent_settings.ts"
+import { projectManagers, readAgentSettings } from "../tools/agent_settings.ts"
 import { setSessionResolver } from "../tools/session_store.ts"
 
 export default (async ({ client, directory }) => {
@@ -30,15 +30,16 @@ export default (async ({ client, directory }) => {
     config: async (config) => {
       const settings = await readAgentSettings()
       const allowed = settings.agentes.coordinador.especialistasPermitidos
-      const coordinator = config.agent?.["agente-coordinador"]
-      if (coordinator) {
-        coordinator.permission ??= {}
-        if (typeof coordinator.permission === "object") {
-          coordinator.permission.task = { "*": "deny",
-            "agente-codigo": allowed.includes("codigo") ? "allow" : "deny",
-            "agente-documentacion": allowed.includes("documentacion") ? "allow" : "deny",
-            "agente-revisor": "allow" }
-        }
+      for (const name of projectManagers) {
+        const manager = config.agent?.[name]
+        if (!manager) continue
+        manager.permission ??= {}
+        if (typeof manager.permission !== "object") continue
+        if (name === "agente-coordinador") manager.permission.task = { "*": "deny",
+          "agente-codigo": allowed.includes("codigo") ? "allow" : "deny", "agente-revisor": "allow" }
+        const tasks = manager.permission.task
+        manager.permission.task = { ...(typeof tasks === "object" ? tasks : { "*": "deny" }),
+          "agente-documentacion": allowed.includes("documentacion") ? "allow" : "deny" }
       }
     },
     "chat.params": async (input) => {
@@ -56,7 +57,8 @@ export default (async ({ client, directory }) => {
       }
       if (!agent.startsWith("agente-")) return
       if (["edit", "write", "apply_patch"].includes(input.tool)) throw new Error("Escritura local restringida a los publicadores de sesión")
-      if (input.tool === "task" && agent === "agente-coordinador" && target !== "agente-revisor") {
+      if (input.tool === "task" && projectManagers.includes(agent) &&
+        (target === "agente-documentacion" || (agent === "agente-coordinador" && target !== "agente-revisor"))) {
         const allowed = (await readAgentSettings()).agentes.coordinador.especialistasPermitidos
         if (!allowed.some((name) => target === `agente-${name}`)) throw new Error("Especialista deshabilitado en agent-settings.json")
       }
