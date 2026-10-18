@@ -25,6 +25,16 @@ permission:
   atlassian_discover: allow
   atlassian_executeRead: allow
   atlassian_atlassianUserInfo: allow
+  atlassian_fetch: allow
+  "jira_*": deny
+  "jira_get*": allow
+  "jira_list*": allow
+  "jira_search*": allow
+  "jira_lookup*": allow
+  jira_discover: allow
+  jira_executeRead: allow
+  jira_atlassianUserInfo: allow
+  jira_fetch: allow
 ---
 
 # Refinador delegado

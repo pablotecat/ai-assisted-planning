@@ -15,6 +15,15 @@ permission:
   "atlassian_lookup*": allow
   atlassian_discover: allow
   atlassian_executeRead: allow
+  atlassian_fetch: allow
+  "jira_*": deny
+  "jira_get*": allow
+  "jira_list*": allow
+  "jira_search*": allow
+  "jira_lookup*": allow
+  jira_discover: allow
+  jira_executeRead: allow
+  jira_fetch: allow
 ---
 
 # Revisor de entregables

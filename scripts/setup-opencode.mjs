@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import { spawnSync } from "node:child_process"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { jiraAliasStatus } from "./jira-aliases.mjs"
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const host = process.cwd()
@@ -43,4 +44,11 @@ await writeFile(configPath, JSON.stringify(config, null, 2) + "\n")
 if (process.platform === "win32") run("cmd.exe", ["/d", "/s", "/c", "npm install"], configDir)
 else run("npm", ["install"], configDir)
 
-console.log(`\nInstalación terminada. Abre OpenCode en ${host}. Ajustes opcionales: ${join(configDir, "agent-settings.json")}.`)
+// Read the merged configuration so global and JSONC MCP entries are checked too.
+const effective = spawnSync(process.platform === "win32" ? "cmd.exe" : "opencode",
+  process.platform === "win32" ? ["/d", "/s", "/c", "opencode debug config"] : ["debug", "config"],
+  { cwd: host, encoding: "utf8", timeout: 120_000, maxBuffer: 4 * 1024 * 1024 })
+if (effective.error) throw effective.error
+if (effective.status !== 0) throw new Error("No se pudo verificar la configuración efectiva. Ejecuta «opencode debug config» y corrige el error antes de usar los agentes.")
+console.log(jiraAliasStatus(JSON.parse(effective.stdout)))
+console.log(`\nComponentes instalados. Cierra y reinicia OpenCode en ${host}. Ajustes opcionales: ${join(configDir, "agent-settings.json")}.`)
