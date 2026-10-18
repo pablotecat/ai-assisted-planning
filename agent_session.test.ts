@@ -57,7 +57,8 @@ test("Planificador y Arquitecto no invocan Documentación, tampoco al reanudar u
     await assert.rejects(before({ tool: "task", sessionID, callID: "resume" },
       { args: { subagent_type: "agente-revisor", task_id: `${sessionID}-docs` } }), /no pueden delegar/)
     await before({ tool: "task", sessionID, callID: "review" }, { args: { subagent_type: "agente-revisor" } })
-    for (const tool of ["atlassian_searchJiraIssuesUsingJql", "atlassian_getJiraIssue", "atlassian_executeRead"])
+    for (const tool of ["atlassian_searchJiraIssuesUsingJql", "atlassian_getJiraIssue", "atlassian_fetch",
+      "jira_searchJiraIssuesUsingJql", "jira_getJiraIssue", "jira_fetch"])
       await before({ tool, sessionID, callID: tool }, { args: {} })
   }
 })
