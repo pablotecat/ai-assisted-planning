@@ -26,7 +26,7 @@ apm install pablotecat/ai-assisted-planning --target opencode
 node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
 ```
 
-APM instala los agentes y skills. El segundo comando configura sus plugins, herramientas, contrato de arquitectura y dependencias npm para OpenCode; no necesitas descargar este repositorio. Después abre o reinicia OpenCode en esa misma carpeta y llama a `planificador` o `arquitecto` según el flujo.
+APM instala los agentes en `.opencode/agents/` y las skills con sus referencias en `.agents/skills/`. El segundo comando registra esa carpeta en `skills.paths` conservando las rutas previas y configura plugins, herramientas, contrato de arquitectura y dependencias npm para OpenCode; no necesitas descargar este repositorio. Después abre o reinicia OpenCode en esa misma carpeta y llama a `planificador` o `arquitecto` según el flujo.
 
 **Actualizar:** desde la misma carpeta, ejecuta:
 
@@ -70,25 +70,32 @@ Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo
 
 Ejecuta `opencode mcp auth jira` (o `opencode mcp auth atlassian`) y `opencode mcp list`: el servidor debe aparecer conectado. Conserva una conexión existente funcional con cualquiera de los dos alias. La autenticación y el sitio se resuelven en OpenCode; `agent-settings.json` guarda la clave del proyecto, no las credenciales ni el `cloudId`.
 
-OpenCode forma los nombres `<alias>_<herramienta>`. Investigador, Planificador, Arquitecto, Refinador, Lector Documentación y Revisor deniegan por defecto y permiten, para ambos alias, las familias de lectura `get*`, `list*`, `search*`, `lookup*` y la operación exacta `fetch`. Esto incluye `search` y `searchJiraIssuesUsingJql`; `fetch` requiere un identificador **ARI** recuperado de una fuente verificada, no una clave como `ES-1228`. Los cinco primeros también admiten `atlassianUserInfo`; el Revisor no lo necesita. Lector Código y Arquitecto Test mantienen su contrato sin acceso Jira.
+OpenCode forma los nombres `<alias>_<herramienta>`. Los permisos efectivos de cada rol están en `.apm/agents/`; la norma de consulta, catálogo, sitio, ARI y campos está en [consulta-jira](.apm/skills/consulta-jira/SKILL.md). Las regresiones contrastan ambos alias con el motor real de OpenCode.
 
-Los permisos de `discover` y `executeRead` mantienen compatibilidad con servidores que publican ese catálogo diferido. Son opcionales: usa solo las herramientas que publique tu conexión. El catálogo depende de la versión y de las políticas del servidor; la documentación de Atlassian describe las capacidades, pero no demuestra las disponibles en tu sesión. Las creaciones, ediciones, comentarios, transiciones, registro de trabajo, `executeWrite` y `executeDestructive` siguen denegados. En los agentes, las denegaciones amplias preceden a las excepciones: OpenCode aplica la **última regla coincidente**. No añadas un permiso general `jira_*: allow` ni `atlassian_*: allow`.
+En los agentes, las denegaciones amplias preceden a las excepciones: OpenCode aplica la **última regla coincidente**. Conserva ese orden al personalizar permisos. La documentación del servidor no demuestra qué catálogo publica una conexión concreta.
 
 La instalación y actualización conservan el alias elegido: APM distribuye los permisos de `.apm/agents/`; `setup-opencode.mjs` consulta la configuración efectiva de OpenCode, incluidos los ajustes globales y JSONC, rechaza un endpoint Atlassian conocido bajo un alias distinto y avisa si Jira sigue pendiente. No renombra conexiones ni autentica automáticamente. Una instalación de componentes no equivale a una conexión Jira comprobada. Cierra y reinicia OpenCode después de instalar o actualizar agentes.
 
 El acceso Jira del Investigador es independiente de `agentes.investigador.especialistasPermitidos`, que limita sus delegaciones a `lector-codigo` y `lector-documentacion`. Solo Investigador y Lector Documentación pueden invocar a `lector-documentacion`. Las fuentes vigentes de agentes son `.apm/agents/`; las copias externas `agents-old/` y `old/` y los antiguos prompts de recreación son históricos y no forman parte de esta distribución. En particular, la antigua prohibición de acceso Jira del rol de investigación no pertenece al contrato actual.
 
-Investigador, Planificador y Arquitecto comparten `agent_settings`: pueden leer el JSON y completar, tras confirmación, los campos vacíos `proyecto.claveProyectoJira`, `proyecto.repositorio`, `proyecto.referencia` y `proyecto.carpetasDocumentales`. El guardado conserva los valores ya informados. Las herramientas específicas son exclusivas de su agente:
+## Mapa normativo compartido
 
-| Agente | Herramienta propia | Ajustes en `.opencode/agent-settings.json` |
+Las fuentes siguientes definen cada norma una sola vez. Los agentes conservan misión, enrutado, secuencia, formatos y criterios de cierre. En el consumidor se cargan las skills por su nombre; los enlaces relativos se resuelven desde el archivo instalado, no desde el directorio de trabajo.
+
+| Propietario normativo | Consumidores | Disparador y cierre verificable |
 |---|---|---|
-| Investigador | `investigator_defaults` | `agentes.investigador` |
-| Planificador | `planning_settings` | `agentes.planificador` |
-| Arquitecto | `architecture_settings` | `agentes.arquitecto` |
+| [consulta-jira](.apm/skills/consulta-jira/SKILL.md) | Investigador, Lector Documentación, Planificador, Refinador, Arquitecto, Revisor | Dato puntual → dato y cierre; selección → historias identificadas; originales → contenido íntegro o límites; investigación/cotejo → evidencia o pendiente por afirmación. |
+| [consulta-codegraph](.apm/skills/consulta-codegraph/SKILL.md) | Lector Código | Investigación de implementación → workspace, índice, referencia y citas comprobados, o `INSUFICIENTE` con acción concreta. Test conserva su lectura directa acotada. |
+| [lectura-documental](.apm/skills/lectura-documental/SKILL.md) | Lector Documentación, `domain-glossary`, `meeting-coach` | Archivos locales → lectura directa o conversión clasificada; salida estándar para el lector, temporal y limpieza para glosario/reuniones. Consentimientos de reuniones en su propia skill. |
+| [fuentes-evidencias.md](.apm/skills/operativa-comun/references/fuentes-evidencias.md) | Ocho agentes, glosario y reuniones | Uso de fuentes → afirmaciones localizables, hechos/inferencias separados y cobertura pendiente explícita. |
+| [configuracion.md](.apm/skills/operativa-comun/references/configuracion.md) | Investigador, lectores, Planificador, Refinador y Arquitecto, según sus herramientas | Valores por defecto, límites o guardado → datos resueltos o pendientes; solo gestores autorizados completan vacíos confirmados. |
+| [publicacion-revision.md](.apm/skills/operativa-comun/references/publicacion-revision.md) | Ocho agentes | Publicar/revisar → contenido, guardado y revisión de versión exacta verificables; cómputo de intentos solo en arquitectura. |
+
+Las tres últimas referencias se alcanzan cargando [operativa-comun](.apm/skills/operativa-comun/SKILL.md) y leyendo solo la rama activa. Investigador tiene lectura únicamente de esas tres referencias instaladas, además de la carga de sus dos skills; la lectura general de código y documentación sigue delegada. Las validaciones de herramientas y permisos siguen siendo la autoridad ejecutable, no una copia documental que haya que retirar. [Evidencia de distribución y permisos](docs/shared-rules-verification.md).
 
 ## Uso
 
-**Consulta puntual:** «Lee la historia Jira ES-1228 y dime su título, no hagas nada más que decirme su título» consulta únicamente `summary` y devuelve su valor literal. La clave delimita la lectura, sin seleccionar proyecto o sprint ni configurar valores por defecto. Se reutilizan el sitio y `cloudId` verificados; solo se pide la información de acceso indispensable que falte. La consulta termina con la respuesta, sin refinamiento, originales, publicaciones, revisión ni escrituras de configuración. Investigador, Arquitecto y Lector Documentación aplican la misma proporcionalidad para consultas compatibles con su rol.
+**Consulta puntual:** «Lee la historia Jira ES-1228 y dime su título, no hagas nada más que decirme su título» activa la rama de dato puntual de `consulta-jira`. Investigador, Planificador, Arquitecto y Lector Documentación la enrutan antes del trabajo completo.
 
 **Refinamiento explícito:** `planificador` busca directamente en Jira las historias del proyecto configurado en `proyecto.claveProyectoJira` de `.opencode/agent-settings.json`. Si está vacío, pide la clave del proyecto al usuario y la guarda para futuros encargos. Puedes indicar claves de historias, un filtro o un sprint para acotar la revisión; un proyecto distinto indicado para un encargo se usa en ese encargo. Las configuraciones anteriores sin este campo se leen como proyecto pendiente de indicar. El planificador recupera el contenido íntegro, publica los originales y delega el refinamiento.
 
@@ -98,9 +105,7 @@ Para el flujo complementario, selecciona `arquitecto` y facilita rutas de histor
 
 El contrato está en [flujo-arquitectura.md](./flujo-arquitectura.md), instalado también en `.opencode/flujo-arquitectura.md` del proyecto anfitrión. `arquitecto` es el punto de entrada; delega en `arquitecto-test` y publica un `plan-implementacion.md` versionado con cobertura, casos revisados, pendientes y bloqueos. El especialista lee directamente el proyecto de Test y diseña únicamente casos UI: reutiliza o actualiza los relacionados con la historia, propone nuevos casos y matrices fundamentadas, e indica su encaje técnico. Las mejoras de código o de la suite requieren una petición concreta de la historia. Backend, Frontend y el proveedor siguen pendientes; el plan integrado conserva la cobertura global parcial. Los borradores se destinan a la creación manual de subtareas y tests en el gestor elegido, incluido Jira. Estos archivos se generan al ejecutar el flujo con historias concretas; no son documentos precreados en este repositorio.
 
-`agentes.arquitecto.maxIntentosRevision` configura las revisiones totales por entrega de especialista, incluida la inicial (por defecto 3); `guardarEntregablesEnSesion` controla su publicación. Las configuraciones anteriores sin el bloque `arquitecto` se leen con los valores por defecto sin reescribirlas. Para continuar un encargo, aporta el último plan y su handoff: conservan versiones, identificadores e intentos consumidos.
-
-`agentes["arquitecto-test"].guardarEntregablesEnSesion` controla la publicación de Test (por defecto `true`, también para configuraciones anteriores). Cada versión de `borrador-tests.md` se revisa mediante el revisor común, con el informe guardado junto al archivo exacto. Si se desactiva el guardado de Test o del revisor, o falla una publicación, se devuelve el borrador con un bloqueo de revisión. Una solicitud de revisión enviada consume un intento aunque falle; el historial documental conserva entregas, informes, resultados y contadores. El límite es una regla del flujo, no un contador automático del publicador.
+Los campos de configuración y sus valores iniciales están en `agent-settings.example.json`; las compatibilidades se validan en `tools/agent_settings.ts`. Para continuar arquitectura aporta el último plan y su handoff, aplicando la rama de intentos de `publicacion-revision.md` a los mismos encargos.
 
 `tools/session_store.ts` asigna carpetas según la sesión verificada por `plugin/agent-session.ts`, rechaza archivos ajenos y no sobrescribe publicaciones. El adaptador de OpenCode proporciona la identidad de cada llamada; una integración nueva necesitará su propio adaptador y fuentes documentadas.
 

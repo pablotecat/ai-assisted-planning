@@ -43,6 +43,10 @@ const configPath = await stat(rootConfig).then(() => rootConfig, (e) => { if (e.
 const config = await json(configPath)
 config.subagent_depth = Math.max(4, Number.isInteger(config.subagent_depth) ? config.subagent_depth : 0)
 config.$schema ??= "https://opencode.ai/config.json"
+// APM deploys skills (including sibling references) to .agents/skills, even for
+// the OpenCode target. Explicit registration also works with external scans off.
+config.skills ??= {}
+config.skills.paths = [...new Set([...(config.skills.paths ?? []), join(host, ".agents", "skills")])]
 await writeFile(configPath, JSON.stringify(config, null, 2) + "\n")
 
 if (process.platform === "win32") run("cmd.exe", ["/d", "/s", "/c", "npm install"], configDir)
