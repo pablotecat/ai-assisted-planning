@@ -26,7 +26,9 @@ await mkdir(configDir, { recursive: true })
 const recordTools = await prepareInstalledTools(source, configDir)
 for (const dir of ["plugin", "tools"]) await cp(join(source, dir), join(configDir, dir), { recursive: true })
 await recordTools()
-await cp(join(source, "flujo-arquitectura.md"), join(configDir, "flujo-arquitectura.md"))
+const architectureContract = await readFile(join(source, "flujo-arquitectura.md"), "utf8")
+await writeFile(join(configDir, "flujo-arquitectura.md"),
+  architectureContract.replaceAll("](.apm/skills/", "](../.agents/skills/"))
 await cp(join(source, "agent-settings.example.json"), join(configDir, "agent-settings.example.json"))
 await cp(join(source, "agent-settings.example.json"), join(configDir, "agent-settings.json"), { force: false })
 

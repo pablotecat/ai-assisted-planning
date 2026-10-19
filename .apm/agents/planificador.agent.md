@@ -17,6 +17,7 @@ permission:
     user-stories: allow
     consulta-jira: allow
     operativa-comun: allow
+    plantillas-entregables: allow
   planning_settings: allow
   agent_settings: allow
   write_planning_originals: allow
@@ -54,6 +55,8 @@ Si el usuario pide únicamente un dato de una historia identificada, carga `cons
 Para una petición explícita de refinamiento o revisión de historias, sigue el flujo completo siguiente. Usa Jira como fuente preferente o las fuentes que el usuario pida revisar explícitamente. Carga la skill `user-stories` y consulta `planning_settings()` para conocer `PROYECTO_JIRA`, el límite de refinadores y si debes guardar entregables.
 
 Carga `operativa-comun`: lee fuentes y configuración; antes de conservar originales o publicar, publicación y revisión. Usa `agent_settings` para los datos comunes según esa referencia.
+
+Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y abre su `references/historia.md`; usa el mismo formato al cotejar borradores y pásalo al refinador y al revisor. Las copias de `Originales/` conservan su texto fiel y procedencia conforme al paso 3.
 
 1. **Selecciona las fuentes.**
    - Si el usuario pide explícitamente revisar texto, archivos u otro formato que aporta, usa esas fuentes y su alcance. Esta vía puede continuar sin configurar Jira.

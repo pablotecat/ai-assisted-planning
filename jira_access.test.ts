@@ -14,10 +14,11 @@ const skillAccess: Record<string, string[]> = {
   investigador: ["consulta-jira", "operativa-comun"],
   "lector-codigo": ["consulta-codegraph", "operativa-comun"],
   "lector-documentacion": ["consulta-jira", "lectura-documental", "operativa-comun"],
-  planificador: ["user-stories", "consulta-jira", "operativa-comun"],
-  refinador: ["user-stories", "consulta-jira", "operativa-comun"],
-  arquitecto: ["consulta-jira", "operativa-comun"],
-  "arquitecto-test": ["operativa-comun"], revisor: ["consulta-jira", "operativa-comun"],
+  planificador: ["user-stories", "consulta-jira", "operativa-comun", "plantillas-entregables"],
+  refinador: ["user-stories", "consulta-jira", "operativa-comun", "plantillas-entregables"],
+  arquitecto: ["consulta-jira", "operativa-comun", "plantillas-entregables"],
+  "arquitecto-test": ["operativa-comun", "plantillas-entregables"],
+  revisor: ["consulta-jira", "operativa-comun", "plantillas-entregables", "user-stories"],
 }
 const references = ["fuentes-evidencias.md", "configuracion.md", "publicacion-revision.md"]
 const reads = ["getAccessibleAtlassianResources", "getJiraIssue", "getJiraProjectIssueTypesMetadata",
@@ -286,7 +287,7 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
     const sharedProbe = `export default {
       description: "Local permission probe, no publication", args: {}, async execute(_, context) {
         const result = { skill: {}, read: {} };
-        for (const name of ${JSON.stringify([...sharedSkills, "user-stories", "domain-glossary", "meeting-coach", "unknown-skill"])}) {
+        for (const name of ${JSON.stringify([...sharedSkills, "plantillas-entregables", "user-stories", "domain-glossary", "meeting-coach", "unknown-skill"])}) {
           try { await context.ask({permission:"skill",patterns:[name],always:[],metadata:{}}); result.skill[name] = "allow"; }
           catch { result.skill[name] = "deny"; }
         }
@@ -380,8 +381,12 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
     assert.ok(setupFile, "APM debe distribuir también el instalador y su helper de alias")
     const setup = join(modules, setupFile)
     assert.match(run("node", [setup], host), /Jira pendiente/)
+    const contract = await readFile(join(host, ".opencode", "flujo-arquitectura.md"), "utf8")
+    assert.ok(!contract.includes("](.apm/skills/"), "El contrato instalado debe enlazar las skills del consumidor")
+    for (const [, target] of contract.matchAll(/\]\(([^)#]+\.md)(?:#[^)]*)?\)/g))
+      assert.ok((await readFile(resolve(host, ".opencode", target), "utf8")).length, `Contrato instalado -> ${target}`)
     const loadedSkills = JSON.parse(run("opencode", ["debug", "skill"], host))
-    for (const name of [...sharedSkills, "domain-glossary", "meeting-coach", "user-stories"])
+    for (const name of [...sharedSkills, "plantillas-entregables", "domain-glossary", "meeting-coach", "user-stories"])
       assert.equal(loadedSkills.find(skill => skill.name === name)?.location, join(host, ".agents", "skills", name, "SKILL.md"))
     const effective = JSON.parse(run("opencode", ["debug", "config"], host))
     assert.ok(effective.skills.paths.includes(join(host, ".agents", "skills")))

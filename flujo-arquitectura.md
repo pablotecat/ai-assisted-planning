@@ -24,15 +24,9 @@ Estados de seguimiento: **pendiente** (trabajo o capacidad aún por completar), 
 
 ## Encargo mínimo para un especialista
 
-- Identificador estable del encargo, especialidad y una sola historia padre.
-- Fuente local y versión identificada; objetivo y fragmentos literales pertinentes de la historia.
-- Criterios de aceptación asignados y reglas transversales necesarias.
-- Alcance, decisiones confirmadas, dependencias y relaciones concretas con otras historias.
-- Dudas conocidas y datos entre áreas que habrá que pedir al proveedor.
-- `MAX_INTENTOS_REVISION` y número de revisiones ya consumidas si es una continuación.
-- Resultado solicitado: evidencia, cobertura por criterio, revisión de la versión exacta y bloqueos; bloques a descomponer para Backend/Frontend y casos concretos para Test, vinculados a la historia y sus criterios.
+Al preparar o continuar una delegación, carga `plantillas-entregables` y aplica [Encargo](.apm/skills/plantillas-entregables/references/encargo.md), incluida su rama Test cuando corresponda. Esa referencia es la fuente normativa de los campos del paquete; este contrato mantiene el alcance, los estados y el consumo de revisiones. Las referencias de formato de este documento viven en `.apm/skills/plantillas-entregables/` en el paquete y se consultan desde la ubicación de la skill instalada por APM en el consumidor.
 
-Para Test, el encargo añade la ruta del proyecto de Test, su alcance y la referencia de código solicitada cuando exista, la carpeta de conocimiento cuando esté disponible, y las rutas de borradores e informes anteriores si es una continuación. El código actual leído es la evidencia de implementación; se distingue la referencia declarada de la comprobada y se registran los cambios locales conocidos.
+El código actual leído por Test es la evidencia de implementación; se distingue la referencia declarada de la comprobada y se registran los cambios locales conocidos. Backend/Frontend reciben bloques a descomponer; Test, casos concretos. El encargo pendiente de capacidad conserva ese estado y no se presenta como análisis técnico realizado.
 
 ## Especialista Test — primera iteración UI
 
@@ -52,27 +46,19 @@ Incluye escenarios negativos, edge y corner cases cuando el resultado esperado s
 
 ### Caso concreto y matriz
 
-Cada caso conserva un identificador local estable y una sola historia padre e incluye:
-
-- Acción propuesta, título, objetivo, criterios y reglas cubiertos, con sus referencias.
-- Precondiciones, datos y preparación, pasos de UI y resultados esperados verificables.
-- Encaje técnico: suite o archivo, caso existente que se reutiliza o actualiza, utilidades y fixtures aprovechables, y recursos que se propone crear. Distingue lo existente de lo propuesto y sigue las convenciones del proyecto.
-- Evidencias, dependencias, historias relacionadas, estado y bloqueos; estimación fundamentada o pendiente.
-- Referencia de la entrega exacta y su revisión, intentos consumidos y hallazgos pendientes.
-
-Un criterio puede requerir varios casos y un caso puede cubrir varios criterios. Una matriz representa un caso parametrizado cuando las variantes comparten procedimiento y objetivo: cada fila tiene identificador estable, condiciones o datos y resultado esperado. Explica qué cobertura aporta. Si cambia sustancialmente el procedimiento o el comportamiento verificado, separa los casos.
+Al diseñar o revisar casos UI y matrices, aplica [Caso de Test](.apm/skills/plantillas-entregables/references/caso-test.md), ramas «caso» y «matriz». Esa referencia agrupa sus campos, identidad única de variantes, encaje técnico y criterio de agrupación. El alcance UI, mantenimiento acotado y fundamento funcional se rigen por las secciones anteriores de este contrato.
 
 ### Entrega y revisión
 
-El especialista publica `borrador-tests.md`: identificación del encargo y fuentes/versiones, casos y matrices, cobertura de todos los criterios asignados, bloqueos y cuestiones, e historial de revisiones y siguiente acción. Aplica publicación, versionado y fallos de la referencia compartida.
+El especialista publica `borrador-tests.md` completo según el contenedor de [Caso de Test](.apm/skills/plantillas-entregables/references/caso-test.md#contenedor-copiable--borrador-testsmd). Aplica publicación, versionado y fallos de la referencia compartida.
 
-El revisor comprueba cobertura, fundamento de resultados esperados, pertinencia de negativos y límites, coherencia de matrices, aprovechamiento de casos existentes, encaje técnico y convenciones del proyecto. Su dictamen identifica los casos o variantes aprobados, pendientes o bloqueados y los hallazgos con evidencia.
+El revisor comprueba cobertura, fundamento de resultados esperados, pertinencia de negativos y límites, coherencia de matrices, aprovechamiento de casos existentes, encaje técnico y convenciones del proyecto. Redacta el dictamen y cualquier disputa según [Revisión](.apm/skills/plantillas-entregables/references/revision.md); el historial de esa referencia permite continuar sobre la versión exacta. Identifica casos o variantes aprobados, pendientes o bloqueados y hallazgos con evidencia.
 
 ## Entrega integrada: `plan-implementacion.md`
 
 1. **Resumen y alcance:** historias recibidas, versión/fuentes, capacidades disponibles y estado global preparatorio, parcial o completo.
 2. **Matriz de cobertura:** historia, criterio y referencia, especialidad, encargo o bloque, estado y motivo. Registra todos los criterios, incluidos los pendientes, y las historias bloqueadas por falta de criterios.
-3. **Borradores listos para copiar:** por historia padre, los bloques aprobados e independientes. Cada borrador incluye identificador local, tipo (subtarea o test), especialidad, título, objetivo, alcance del trabajo o prueba, criterios cubiertos, resultado esperado, dependencias, historias relacionadas, evidencias y referencia a la revisión exacta con el número de intentos. El identificador local no es una clave real del gestor. Las estimaciones son propuestas fundamentadas o se indican pendientes.
+3. **Borradores listos para copiar:** por historia padre, los bloques aprobados e independientes según [Tarea](.apm/skills/plantillas-entregables/references/tarea.md) y los tests según [Caso de Test](.apm/skills/plantillas-entregables/references/caso-test.md). Esas plantillas conservan identidad local frente a clave real, vínculos con criterios, evidencia, dependencias, estimación pertinente y revisión exacta con sus intentos. No se incorporan como listos los paquetes pendientes de capacidad.
 4. **Encargos pendientes:** paquetes preparados por especialidad cuando todavía no se puede ejecutar el análisis o falta una capacidad. No se presentan como borradores técnicos aprobados. Conserva los identificadores, `task_id` disponibles, versiones analizadas e intentos consumidos de cada encargo, incluidos los ya ejecutados, para poder continuar.
 5. **Bloqueos y cuestiones:** identificador, historias/criterios/bloques afectados, fuente y evidencia, intentos consumidos cuando proceda, impacto, pregunta concreta y acción requerida. Incluye las contradicciones y dudas reunidas por todos los especialistas.
 6. **Decisiones y dependencias globales:** propietario de trabajo compartido, relaciones entre historias, decisiones técnicas sustentadas y respuestas confirmadas del usuario.
@@ -86,3 +72,5 @@ La primera fase incorporó `arquitecto`, su configuración y la integración con
 El siguiente hito de validación es perfilar Test con historias locales reales y su proyecto: crear un caso, actualizar otro existente y comprobar negativos, límites y matrices cuando procedan. Las comprobaciones del paquete verifican configuración, procedencia, publicación y revisión; no acreditan por sí solas la calidad del diseño del especialista.
 
 Próximas iteraciones: definir la escritura del conocimiento compartido; ampliar los niveles de Test; implementar Backend, Frontend y el proveedor; afinar descomposición y estimaciones; ampliar la entrada oficial desde gestores de tareas y, cuando exista confianza suficiente, valorar la publicación automática. El orden se confirmará con el usuario. Al cerrar cada sesión, la respuesta incluye un handoff con la versión vigente, decisiones, encargos e intentos consumidos, bloqueos y siguiente acción.
+
+Para continuar, el handoff referencia las entregas e informes exactos y el [historial compartido por encargo](.apm/skills/plantillas-entregables/references/revision.md#historial-compartido), incluidos los `task_id` disponibles. Puede permanecer en la respuesta; no requiere un archivo adicional.
