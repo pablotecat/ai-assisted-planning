@@ -14,6 +14,7 @@ permission:
   question: allow
   skill:
     user-stories: allow
+    plantillas-entregables: allow
   planning_settings: allow
   agent_settings: allow
   write_planning_originals: allow
@@ -53,6 +54,8 @@ La consulta termina al devolver el dato. No carga `user-stories` ni activa refin
 ## Encargo de refinamiento
 
 Para una petición explícita de refinamiento o revisión de historias, sigue el flujo completo siguiente. Usa Jira como fuente preferente o las fuentes que el usuario pida revisar explícitamente. Carga la skill `user-stories` y consulta `planning_settings()` para conocer `PROYECTO_JIRA`, el límite de refinadores y si debes guardar entregables.
+
+Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y abre su `references/historia.md`; usa el mismo formato al cotejar borradores y pásalo al refinador y al revisor. Las copias de `Originales/` conservan su texto fiel y procedencia conforme al paso 3.
 
 Gestiona los datos comunes con `agent_settings(action: "read")` y `agent_settings(action: "saveMissing", values: {...})`: tras confirmación puedes completar `claveProyectoJira`, `repositorio`, `referencia` y `carpetasDocumentales` vacíos. Consulta tus límites y guardado propios de `agentes.planificador` mediante `planning_settings()`.
 

@@ -82,51 +82,59 @@ Señala si es un bloque pendiente de descomposición o una propuesta concreta. L
 
 ### 1. Contrastar formatos con los contratos y herramientas
 
-- [ ] Verifica el catálogo contra agentes, skills, contrato y herramientas vigentes después de las actuaciones anteriores.
-- [ ] Identifica por formato los campos obligatorios actuales y los opcionales. Conserva las obligaciones de fuentes, cobertura, versiones y revisión.
-- [ ] Comprueba los argumentos y nombres de archivo de las herramientas: los originales, historias e incidencias siguen siendo documentos distintos y las publicaciones siguen siendo versionadas.
+- [x] Verifica el catálogo contra agentes, skills, contrato y herramientas vigentes después de las actuaciones anteriores.
+- [x] Identifica por formato los campos obligatorios actuales y los opcionales. Conserva las obligaciones de fuentes, cobertura, versiones y revisión.
+- [x] Comprueba los argumentos y nombres de archivo de las herramientas: los originales, historias e incidencias siguen siendo documentos distintos y las publicaciones siguen siendo versionadas.
 
 **Resultado:** cada exigencia actual tiene destino y cada incorporación de formato se ajusta a las decisiones confirmadas.
 
 ### 2. Crear la skill y las referencias de formatos
 
-- [ ] Crea un `SKILL.md` breve con disparadores de redacción o revisión de entregables, elección del formato y criterios de finalización.
-- [ ] Usa una referencia por tipo prioritario: Historia, Tarea, Encargo, Revisión y Caso de Test. Agrupa en su referencia las variantes y contenedores estrechamente relacionados.
-- [ ] Incluye estructura copiable, campos obligatorios, opcionales y criterio de suficiencia documental. Separa las instrucciones al agente de la plantilla que aparecerá en el entregable.
-- [ ] Incluye ejemplos breves inequívocamente ficticios para los cinco formatos prioritarios. Muestra un dato pendiente y una propuesta diferenciada de un acuerdo.
+- [x] Crea un `SKILL.md` breve con disparadores de redacción o revisión de entregables, elección del formato y criterios de finalización.
+- [x] Usa una referencia por tipo prioritario: Historia, Tarea, Encargo, Revisión y Caso de Test. Agrupa en su referencia las variantes y contenedores estrechamente relacionados.
+- [x] Incluye estructura copiable, campos obligatorios, opcionales y criterio de suficiencia documental. Separa las instrucciones al agente de la plantilla que aparecerá en el entregable.
+- [x] Incluye ejemplos breves inequívocamente ficticios para los cinco formatos prioritarios. Muestra un dato pendiente y una propuesta diferenciada de un acuerdo.
 - [ ] Reutiliza las reglas compartidas de evidencia, publicación y revisión mediante referencias con disparadores. Conserva la revisión de la versión exacta y los contadores en sus contratos.
 
 **Resultado:** un agente puede elegir y aplicar solo la plantilla pertinente, y una persona distingue claramente contenido, evidencia y decisiones pendientes.
 
 ### 3. Conectar productores y revisión
 
-- [ ] Planificador y Refinador cargarán Historia al redactar o revisar un entregable, además de las ramas de `user-stories` que correspondan.
-- [ ] Arquitecto utilizará Encargo y Tarea; Arquitecto Test utilizará Caso de Test y su contenedor. Revisor consultará el formato aplicable junto con el encargo y sus fuentes.
-- [ ] Actualiza permisos para que cada consumidor pueda cargar la skill y leer sus referencias con el alcance necesario.
-- [ ] Sustituye las estructuras duplicadas de agentes y contrato por punteros, manteniendo junto al rol sus obligaciones de negocio y su condición de cierre.
-- [ ] Mantén nombres y argumentos de publicadores cuando ya admitan el Markdown necesario. Introduce cambios de herramienta únicamente para resolver incompatibilidades concretas verificadas.
+- [x] Planificador y Refinador cargarán Historia al redactar o revisar un entregable, además de las ramas de `user-stories` que correspondan.
+- [x] Arquitecto utilizará Encargo y Tarea; Arquitecto Test utilizará Caso de Test y su contenedor. Revisor consultará el formato aplicable junto con el encargo y sus fuentes.
+- [x] Actualiza permisos para que cada consumidor pueda cargar la skill y leer sus referencias con el alcance necesario.
+- [x] Sustituye las estructuras duplicadas de agentes y contrato por punteros, manteniendo junto al rol sus obligaciones de negocio y su condición de cierre.
+- [x] Mantén nombres y argumentos de publicadores cuando ya admitan el Markdown necesario. Introduce cambios de herramienta únicamente para resolver incompatibilidades concretas verificadas.
 
 **Resultado:** productores y Revisor utilizan el mismo contrato de formato, y las herramientas conservan sus garantías de publicación.
 
 ### 4. Publicar el catálogo y resolver el resto de formatos
 
-- [ ] Incorpora al `README.md` el catálogo completo, con ubicación normativa, propósito y consumidores. Distingue plantillas de texto, documentos fieles al original y salidas automáticas.
-- [ ] Confirma la ubicación de cada formato secundario siguiendo la tabla. Extrae un formato adicional solo cuando el análisis demuestre una duplicación o intercambio que lo justifique; registra el motivo en el catálogo.
-- [ ] Conserva el handoff en su contrato de continuidad y enlaza los campos compartidos, evitando exigir un archivo nuevo para un resultado que hoy se entrega en conversación.
+- [x] Incorpora al `README.md` el catálogo completo, con ubicación normativa, propósito y consumidores. Distingue plantillas de texto, documentos fieles al original y salidas automáticas.
+- [x] Confirma la ubicación de cada formato secundario siguiendo la tabla. Extrae un formato adicional solo cuando el análisis demuestre una duplicación o intercambio que lo justifique; registra el motivo en el catálogo.
+- [x] Conserva el handoff en su contrato de continuidad y enlaza los campos compartidos, evitando exigir un archivo nuevo para un resultado que hoy se entrega en conversación.
 
 **Resultado:** se conocen todos los formatos existentes y queda justificado cuáles comparten plantilla y cuáles permanecen especializados.
 
 ## Validación
 
-- [ ] Recorre los ejemplos de Historia, Tarea, Encargo, Revisión y Test con los criterios de sus contratos. Comprueba identificadores, fuentes, estados, propuestas y cobertura pendiente.
-- [ ] Revisa una historia dividida, un criterio propuesto, un bloque pendiente de descomposición, una revisión parcial y una matriz de Test. Cada caso debe conservar sus relaciones y límites.
-- [ ] Comprueba que un original sigue siendo fiel a la fuente y que el formato de entrega permite cotejar todos sus criterios.
-- [ ] Comprueba que `plan-implementacion.md` mantiene sus seis apartados contractuales y puede integrar tareas y casos sin perder bloqueos ni intentos de revisión.
-- [ ] Verifica instalación y lectura de referencias en un consumidor local. Ejecuta las pruebas existentes afectadas; ejecuta `node --test *.test.ts` si se han modificado permisos, distribución, publicadores o comprobaciones documentales.
-- [ ] Ejecuta `git diff --check`. Identifica como pendientes las validaciones obligatorias que requieran una herramienta ausente.
+- [x] Recorre los ejemplos de Historia, Tarea, Encargo, Revisión y Test con los criterios de sus contratos. Comprueba identificadores, fuentes, estados, propuestas y cobertura pendiente.
+- [x] Revisa una historia dividida, un criterio propuesto, un bloque pendiente de descomposición, una revisión parcial y una matriz de Test. Cada caso debe conservar sus relaciones y límites.
+- [x] Comprueba que un original sigue siendo fiel a la fuente y que el formato de entrega permite cotejar todos sus criterios.
+- [x] Comprueba que `plan-implementacion.md` mantiene sus seis apartados contractuales y puede integrar tareas y casos sin perder bloqueos ni intentos de revisión.
+- [x] Verifica instalación y lectura de referencias en un consumidor local. Ejecuta las pruebas existentes afectadas; ejecuta `node --test *.test.ts` si se han modificado permisos, distribución, publicadores o comprobaciones documentales.
+- [x] Ejecuta `git diff --check`. Identifica como pendientes las validaciones obligatorias que requieran una herramienta ausente.
 
 ## Cierre y retirada de estas instrucciones
 
 - [ ] Confirma que los cinco tipos prioritarios tienen formato aplicable, consumidores conectados y validación completa; el catálogo cubre también los secundarios.
 - [ ] Comunica las ubicaciones definitivas, el alcance real de la validación y el reinicio de OpenCode tras la actualización.
 - [ ] Elimina únicamente `docs/planes/03-plantillas-de-entregables.md`. Ante bloqueos, conserva este archivo con la siguiente acción. El siguiente trabajo es revisar y limpiar el conjunto con `writing-for-agents`.
+
+## Estado de esta rama y siguiente acción de integración
+
+Implementación del alcance de plantillas terminada sobre `15267b1`, con ocho agentes vigentes. La centralización del plan 2 se desarrolla en paralelo por decisión expresa: se enlazan sus tres destinos finales de `operativa-comun`, sin copias ni placeholders. El paso de reglas compartidas y el cierre definitivo quedan pendientes de verificar esas referencias tras el merge.
+
+Evidencias y ubicaciones: [verificación de plantillas](../deliverable-templates-verification.md). Suite completa ejecutada: 25 pruebas, 22 aprobadas y 3 fallidas; una por esos destinos ausentes y dos probes APM existentes por fallos de staging (`WinError 206` y `WinError 3`). Comprobación final específica: 4 pruebas, 3 aprobadas y 1 fallida por los destinos del plan 2. APM local y carga/lectura real OpenCode de los cinco consumidores verificadas (13 lecturas de las cinco referencias). No se modifica `jira_access.test.ts`, propiedad del plan 2.
+
+El padre debe integrar las reglas, resolver los solapamientos de agentes/README/contrato y los probes de instalación, repetir la suite y completar este checklist antes de retirar solo este plan. Comunicar al usuario las ubicaciones finales y el reinicio de OpenCode tras actualizar.

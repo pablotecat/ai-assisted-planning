@@ -6,3 +6,5 @@
 4. Match detail to timing: a near-term story needs enough scope for the next planning or delivery conversation; distant work can remain a broad goal. Ask when a decision is needed if the horizon is unknown. **Done when:** detail serves the next actual decision rather than a hypothetical one.
 
 Return the candidate (or reason it is pending), intended value and its provenance when uncertain, relevant known constraints, and the few questions the accountable person must answer. If useful, route candidate acceptance evidence through [confirmation](confirmation.md), labeling it as proposed.
+
+Para entregar el candidato como historia refinada o `borrador.md`, usa [Historia](../../plantillas-entregables/references/historia.md); conserva allí la procedencia y los pendientes que resulten de estos pasos.

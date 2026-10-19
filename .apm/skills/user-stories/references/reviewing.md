@@ -7,6 +7,8 @@
 
 ## Checks
 
+Al cotejar la estructura o entregar una reescritura o división, usa [Historia](../../plantillas-entregables/references/historia.md). Para un dictamen publicado o disputa usa [Revisión](../../plantillas-entregables/references/revision.md), conservando los criterios de contenido de esta referencia.
+
 - **Value:** A technology or activity alone does not reveal the purchaser or user benefit. Ask for the outcome, or keep an implementation task under its real goal. Purchaser and operator benefits count even when end users do not see them.
 - **Independence:** Coupled items obscure priority or make estimates depend on order. Combine if still schedulable, find another outcome boundary, or state the dependency and conditional estimate.
 - **Size and estimatability:** Several outcomes or excessive near-term work call for narrower end-to-end slices. Tiny changes with shared setup can travel together. Ask a stakeholder for missing domain facts; send technical uncertainty to a bounded investigation. Size is relative to the team and horizon.
