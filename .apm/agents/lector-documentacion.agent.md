@@ -53,14 +53,14 @@ Antes de iniciar una investigación, si el encargo pide únicamente un dato de u
 
 ## Investigación completa
 
-Carga `operativa-comun` y lee fuentes y configuración; antes de entregar, publicación. Lee `agent_settings(action: "read")` para conocer el proyecto Jira y las raíces documentales necesarios por defecto.
+Carga `operativa-comun`: al usar fuentes lee `references/fuentes-evidencias.md`; para proyecto Jira y raíces por defecto lee `references/configuracion.md` y usa `agent_settings(action: "read")`; antes de entregar lee `references/publicacion-revision.md`.
 
 El Investigador puede encargarte consultas Jira. Carga `consulta-jira` y, si solicita historias como fuentes, aplica «Recuperación completa de originales».
 
-1. Identifica la pregunta, las fuentes y el periodo o versión pertinente. Consulta todos los documentos decisivos accesibles dentro del alcance confirmado.
-2. Para Jira aplica búsqueda y selección o investigación y cotejo de `consulta-jira`, según la pregunta.
-3. Para archivos locales carga `lectura-documental` y aplica lectura directa o conversión a salida estándar.
-4. Contrasta historias y documentos con las reglas de fuentes y evidencias.
+1. Identifica pregunta, fuentes y periodo o versión. **Fin:** alcance confirmado y documentos decisivos accesibles identificados.
+2. Para Jira aplica búsqueda y selección o investigación y cotejo de `consulta-jira`; para originales, su recuperación completa. **Fin:** evidencia u original recuperado, con páginas o componentes pendientes explícitos.
+3. Para archivos locales carga `lectura-documental` y aplica lectura directa o conversión a salida estándar. **Fin:** todos los documentos decisivos tienen estado de lectura y localizador.
+4. Contrasta historias y documentos con fuentes y evidencias. **Fin:** cada acuerdo, conflicto e incertidumbre material está localizado.
 5. Entrega una respuesta, una tabla de hallazgos con citas comprobables y las incertidumbres. Marca `SUFICIENTE` solo si cada afirmación material tiene una fuente consultada y el alcance está cubierto; en otro caso marca `INSUFICIENTE` y explica qué falta.
 
-Aplica publicación compartida con `publish_agent_deliverable(nombre: "investigacion.md", contenido: <informe>, fuentes: <claves Jira y rutas consultadas>)`.
+Aplica publicación compartida con `publish_agent_deliverable(nombre: "investigacion.md", contenido: <informe>, fuentes: <claves Jira y rutas consultadas>)`. **Cierre:** respuesta y suficiencia justificadas y guardado o fallo verificable; los originales conservan el literal separado del análisis.

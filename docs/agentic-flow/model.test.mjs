@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FACTORIES, AREAS, EXAMPLE, TOTAL_TASKS, snapshotAt, pointOnRoute } from "./model.mjs";
+import { FACTORIES, AREAS, EXAMPLE, TOTAL_TASKS, FIGURE_SCOPE, snapshotAt, pointOnRoute } from "./model.mjs";
 import { beltRectangles } from "./geometry.mjs";
 import { readFile } from "node:fs/promises";
 
@@ -86,12 +86,14 @@ test("cada fotograma mantiene papeles sobre transportadores, sin atravesar estac
 });
 
 test("los dos HTML distribuidos contienen el modelo, los nombres y las etiquetas accesibles vigentes", async () => {
-  const source = (await readFile(new URL("./model.mjs", import.meta.url), "utf8")).replace(/^export /gm, "");
-  const live = await readFile(new URL("./live.mjs", import.meta.url), "utf8");
+  const source = (await readFile(new URL("./model.mjs", import.meta.url), "utf8")).replaceAll("\r\n", "\n").replace(/^export /gm, "");
+  const live = (await readFile(new URL("./live.mjs", import.meta.url), "utf8")).replaceAll("\r\n", "\n");
   for (const filename of ["index.html", "index-light.html"]) {
-    const html = await readFile(new URL(filename, import.meta.url), "utf8");
+    const html = (await readFile(new URL(filename, import.meta.url), "utf8")).replaceAll("\r\n", "\n");
     assert.ok(html.includes(source), `${filename}: modelo embebido`);
     assert.ok(html.includes(live), `${filename}: interacción`);
+    assert.equal([...html.matchAll(/data-flow-scope><strong>ILUSTRATIVA\.<\/strong>/g)].length, 2, `${filename}: alcance junto a cada figura`);
+    assert.ok(html.includes(FIGURE_SCOPE), `${filename}: capacidad actual y prevista`);
     for (const line of FACTORIES) for (const node of line.nodes) {
       assert.ok(html.includes(`data-station="${node.id}"`), `${filename}: ${node.id}`);
       assert.ok(html.includes(`aria-label="${node.name}: ${node.detail}"`), `${filename}: accesibilidad ${node.id}`);

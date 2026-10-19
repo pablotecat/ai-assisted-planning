@@ -8,7 +8,9 @@ Todos los apartados son obligatorios salvo historias relacionadas y estimación 
 
 Backend y Frontend siguen como capacidades pendientes: conserva sus paquetes como encargos y sus bloques pendientes de descomposición cuando corresponda; no los presentes como tareas concretas analizadas o revisadas. Un bloque a descomponer identifica ese nivel de precisión incluso tras una futura revisión. Un trabajo compartido tiene una sola historia propietaria; las demás son relacionadas.
 
-**Cierre:** identidad local diferenciada de clave real, una sola historia padre, criterios verificables, resultado/comprobación y estado coherentes con sus dependencias. Un bloque solo está listo para copiar con revisión exacta favorable y comprobación global; conserva el historial según [Revisión](revision.md#historial-compartido).
+Antes de publicar, revisar o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md), incluida la norma de intentos de arquitectura; [Revisión](revision.md#historial-compartido) define solo cómo representar el historial. El contrato determina estados e integración global.
+
+**Cierre:** identidad local diferenciada de clave real, historia padre única, criterios verificables, resultado/comprobación y estado coherentes con dependencias y revisión según esas autoridades.
 
 ## Plantilla copiable
 

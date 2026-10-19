@@ -1,6 +1,7 @@
 export const EXAMPLE = { documents: 3, refiners: 3, investigators: 2, tasksPerArea: 3 };
 export const AREAS = [{ id: "test", name: "Test", letter: "T" }, { id: "back", name: "Back", letter: "B" }, { id: "front", name: "Front", letter: "F" }];
 export const TOTAL_TASKS = AREAS.length * EXAMPLE.tasksPerArea;
+export const FIGURE_SCOPE = "Hoy: investigación, refinamiento y Test UI con lectura directa de su proyecto, Revisor común y publicación versionada. Previsto: Backend, Frontend y proveedor. Las tres ramas, revisores por rama y nueve tareas son el ejemplo visual, no capacidades instaladas ni resultados reales.";
 
 const station = (id, name, detail, x, y, type = "work", w = 84, agent = id) => ({ id, name, detail, x, y, type, w, d: type === "archive" ? 92 : 38, agent });
 export const portOf = (node, side = "right") => side === "left" ? [node.x - node.w / 2, node.y + 8] : side === "north" ? [node.x, node.y - node.d / 2] : side === "south" ? [node.x, node.y + node.d / 2] : [node.x + node.w / 2, node.y + 8];

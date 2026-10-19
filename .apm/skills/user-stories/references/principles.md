@@ -1,17 +1,17 @@
-# Classify before rewriting
+# Clasificar antes de reescribir
 
-A story is a planning-sized reminder of functionality valuable to a **user or purchaser**. Its short statement starts a conversation; agreed acceptance evidence confirms the outcome. A developer may be the genuine user of a developer-facing product. Use the form that communicates the need rather than recasting every item as a story:
+Una historia es un recordatorio, de tamaño adecuado para planificar, de una funcionalidad valiosa para un **usuario o comprador**. Su enunciado breve inicia una conversación; la evidencia de aceptación acordada confirma el resultado. Un desarrollador puede ser el usuario genuino de un producto para desarrolladores. Usa la forma que comunique la necesidad, en lugar de reformular todos los elementos como historias:
 
-| Kind | Recognition and handling |
+| Tipo | Reconocimiento y tratamiento |
 | --- | --- |
-| Story | A distinct beneficiary outcome can be prioritized, delivered, and observed. State the goal; keep settled decisions accessible without making the story a full specification. |
-| Epic | A valuable but distant or oversized outcome. Keep it broad until a planning decision needs smaller outcomes. |
-| Task or spike | Implementation or investigation without its own delivered product outcome. Associate it with the goal it enables; timebox a technical investigation and identify what must be learned. |
-| Constraint | A policy, quality, or condition governing several stories or the system. Give it a scope and a way to check it where possible; retain a binding technology choice rather than inventing a user benefit. |
-| Acceptance check | A condition and observable result that establishes part of an outcome. Attach it to the story or constraint; a new, independently valuable outcome may instead warrant its own story. |
+| Historia | Un resultado diferenciado para un beneficiario que puede priorizarse, entregarse y observarse. Expresa el objetivo y conserva accesibles las decisiones acordadas sin convertir la historia en una especificación completa. |
+| Épica | Un resultado valioso, pero lejano o demasiado grande. Mantenlo amplio hasta que una decisión de planificación requiera resultados menores. |
+| Tarea o spike | Implementación o investigación sin un resultado de producto entregado propio. Asóciala al objetivo que habilita; acota en tiempo la investigación técnica e identifica qué debe aprenderse. |
+| Restricción | Una política, cualidad o condición que rige varias historias o el sistema. Dale alcance y, cuando sea posible, una forma de comprobarla; conserva una elección tecnológica vinculante en lugar de inventar un beneficio de usuario. |
+| Comprobación de aceptación | Una condición y un resultado observable que acreditan parte de un resultado. Vincúlala a la historia o restricción; un resultado nuevo con valor independiente puede justificar una historia propia. |
 
-A defect can retain its bug-report form (observed versus expected behavior). A design guide or external-system interface agreement can hold details better expressed there, linked to affected stories. For distributed teams or traceability needs, retain decisions and links to evidence beyond the short story text.
+Un defecto puede conservar su formato de informe de error (comportamiento observado frente al esperado). Una guía de diseño o acuerdo de interfaz con un sistema externo puede contener los detalles que se expresen mejor allí, enlazados a las historias afectadas. Para equipos distribuidos o necesidades de trazabilidad, conserva decisiones y enlaces a evidencias más allá del texto breve de la historia.
 
-## INVEST as diagnosis
+## INVEST como diagnóstico
 
-Ask whether a story is independently schedulable, negotiable where choices remain open, valuable to an actual user or purchaser, estimatable by this team, small enough for its **planning horizon**, and testable by observation. Use a weak answer to locate the relevant conversation or repair, not to calculate a score. Dependencies can be real; binding constraints remain binding; distant epics need less detail; human observation can provide evidence when automation cannot. See [reviewing](reviewing.md) for repairs and [context](context.md) for planning decisions.
+Pregunta si la historia puede planificarse por separado, es negociable donde quedan opciones abiertas, aporta valor a un usuario o comprador real, puede estimarla este equipo, es suficientemente pequeña para su **horizonte de planificación** y se puede comprobar por observación. Una respuesta débil sirve para localizar la conversación o corrección pertinente, no para calcular una puntuación. Las dependencias pueden ser reales; las restricciones vinculantes siguen siéndolo; las épicas lejanas necesitan menos detalle; la observación humana puede aportar evidencia cuando la automatización no puede. Para corregir usa [revisión](reviewing.md); para decisiones de planificación, [contexto](context.md). **Cierre:** el elemento tiene una clasificación fundamentada o la pregunta que falta para decidirla.

@@ -4,7 +4,7 @@
 
 Arquitecto prepara un paquete por historia y especialidad, ejecutable o pendiente de capacidad. Todos los apartados de la plantilla son obligatorios. La rama «Contexto Test» se incluye solo para Test; referencia solicitada y conocimiento pueden estar pendientes o no aplicar con motivo. Relaciones entre áreas solo transmiten el contrato o dato pertinente, no código ajeno. El resultado requerido distingue bloques a descomponer Backend/Frontend de casos UI concretos Test.
 
-Conserva el mismo ID y `task_id` disponibles en continuaciones. El límite, los intentos consumidos y el historial deben permitir decidir si cabe otra solicitud; aplica «Revisión y estados» del contrato, con el registro de [Revisión](revision.md#historial-compartido). Un historial desconocido se declara bloqueado, no se interpreta como cero.
+Conserva ID y `task_id` disponibles en continuaciones. Antes de delegar, publicar, revisar o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md#intentos--solo-flujo-de-arquitectura), fuente normativa de límite, cómputo, historial y fallos. Representa sus datos con [Revisión](revision.md#historial-compartido); el contrato mantiene alcance y estados.
 
 **Cierre:** el receptor puede identificar qué analizar, qué fuentes y criterios usar, qué devolver y si tiene margen de revisión. Cada dato indispensable ausente tiene efecto y pregunta; la falta de especialista mantiene el paquete pendiente, sin fingir análisis realizado.
 

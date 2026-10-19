@@ -54,7 +54,7 @@ Si el usuario pide únicamente un dato de una historia identificada, carga `cons
 
 Para una petición explícita de refinamiento o revisión de historias, sigue el flujo completo siguiente. Usa Jira como fuente preferente o las fuentes que el usuario pida revisar explícitamente. Carga la skill `user-stories` y consulta `planning_settings()` para conocer `PROYECTO_JIRA`, el límite de refinadores y si debes guardar entregables.
 
-Carga `operativa-comun`: lee fuentes y configuración; antes de conservar originales o publicar, publicación y revisión. Usa `agent_settings` para los datos comunes según esa referencia.
+Carga `operativa-comun`: al seleccionar y cotejar fuentes lee `references/fuentes-evidencias.md`; para datos comunes con `agent_settings`, `references/configuracion.md`; antes de conservar originales o publicar/revisar, `references/publicacion-revision.md`.
 
 Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y abre su `references/historia.md`; usa el mismo formato al cotejar borradores y pásalo al refinador y al revisor. Las copias de `Originales/` conservan su texto fiel y procedencia conforme al paso 3.
 
@@ -68,3 +68,5 @@ Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y
 5. Contrasta cada borrador con el original y las demás entregas: cobertura, cambios, coherencia y conflictos. Repregunta al refinador mediante su `task_id` ante errores materiales; decide y documenta desacuerdos y cuestiones abiertas.
 6. Entrega por cada identificador una historia final y sus incidencias, más un informe global. Aplica publicación compartida con `write_planning_deliverables(historias, incidencias_globales, fuentes?, decisiones?)`.
 7. Tras publicar, invoca `revisor` según revisión compartida con las rutas de `Originales/`, las fuentes consultadas (incluido el contenido recuperado de Jira) y los requisitos aplicables. Si detecta errores, publica una **nueva entrega completa** y pide una nueva revisión en el mismo `task_id`. Identifica la versión vigente y el estado de revisión.
+
+**Cierre por etapa:** selección identificada o pendiente; originales fieles disponibles o límite declarado antes de delegar; todos los criterios asignados y cotejados; entrega completa con historia e incidencias por ID y globales; revisión de la versión vigente comprobada o bloqueo explícito. Devuelve las decisiones funcionales abiertas al usuario, conservando propuestas separadas de acuerdos.

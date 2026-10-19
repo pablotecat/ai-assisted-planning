@@ -18,23 +18,28 @@ sean realmente ambiguos.
 
 1. Haz un inventario de las fuentes relevantes: documentación funcional y técnica,
    anexos, resúmenes, estado vigente, notas y preparaciones de reuniones. Prefiere
-   la copia canónica cuando existan duplicados.
+   la copia canónica cuando existan duplicados. **Fin:** corpus identificado y
+   alcance o destino confirmados.
 2. Para ingerir fuentes aplica [lectura documental](../lectura-documental/SKILL.md):
    lectura directa o rama de conversión temporal. Termina con cada fuente clasificada
    y los temporales propios limpios o su fallo declarado.
-3. Aplica [fuentes y evidencias](../operativa-comun/references/fuentes-evidencias.md)
-   al extraer afirmaciones y registrar límites de lectura.
+3. Al extraer afirmaciones y registrar límites aplica
+   [fuentes y evidencias](../operativa-comun/references/fuentes-evidencias.md).
+   **Fin:** cada afirmación utilizable tiene original y localizador.
 4. Extrae términos que una persona nueva necesite para comprender el dominio,
    sus procesos, cálculos, datos, sistemas internos y siglas. Excluye vocabulario
    trivial y términos genéricos de ingeniería que no tengan un significado
-   específico en el proyecto.
+   específico en el proyecto. **Fin:** conceptos relevantes identificados.
 5. Normaliza una forma canónica por concepto. Agrupa abreviaturas, grafías y
    traducciones solo cuando las fuentes permitan tratarlas como variantes.
-   Mantén separados los conceptos relacionados que no sean sinónimos.
+   Mantén separados los conceptos relacionados que no sean sinónimos. **Fin:**
+   cada agrupación tiene fundamento documental o etiqueta de inferencia.
 6. Define cada término en el contexto del proyecto. Señala expresamente las
-   inferencias, ambigüedades, conflictos y siglas no desarrolladas. No inventes
-   expansiones ni conviertas ejemplos observados en reglas contractuales.
-7. Ordena alfabéticamente y escribe el archivo. No uses tablas.
+   inferencias, ambigüedades, conflictos y siglas no desarrolladas. Conserva como
+   desconocidas las expansiones sin fuente y distingue ejemplos de reglas
+   contractuales. **Fin:** una definición por concepto con su evidencia o límite.
+7. Ordena alfabéticamente y escribe el archivo con secciones, sin tablas.
+   **Fin:** cumple la verificación de abajo.
 
 ## Formato de salida
 

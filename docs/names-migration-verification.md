@@ -1,5 +1,7 @@
 # Nombres y migración: verificación
 
+> **Evidencia histórica del plan 1**, anterior a reglas compartidas, plantillas y limpieza. Sus cifras son las ejecutadas entonces. Estado posterior: [verificación de instrucciones](agent-instructions-verification.md).
+
 Fecha: **2026-10-19**. Entorno: Windows, Node.js 24.18.0, OpenCode 1.19.3 y APM 0.32.0.
 
 La nomenclatura operativa está en `.apm/agents/`, `agent-settings.example.json` y `tools/agent_settings.ts`. Las instrucciones de actualización y continuidad están en [README.md, Migración de nombres](../README.md#migración-de-nombres).
@@ -49,4 +51,4 @@ Las pruebas APM usan **copias locales**. Para que APM lea sus cambios se reinsta
 | `informes-agente/sesiones` | Ubicación configurable de entregables, conservada como valor por defecto. |
 | Evidencias y capturas del 17 de octubre | Son históricas y están identificadas como anteriores al renombrado. |
 
-**Después de actualizar, cierra y reinicia OpenCode y abre sesiones nuevas.** Continúa con los documentos y el handoff anteriores, conservando decisiones e intentos consumidos. El siguiente plan centraliza reglas sobre estas identidades.
+**Después de actualizar, cierra y reinicia OpenCode y abre sesiones nuevas.** Continúa con los documentos y el handoff anteriores, conservando decisiones e intentos consumidos. En el momento de esta verificación, la centralización de reglas era la siguiente actuación.

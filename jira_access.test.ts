@@ -56,12 +56,13 @@ await rm(versionRoot, { recursive: true, force: true })
 async function checkPointers(skillsDir: string) {
   // Resolve from the installed file, not the repository: APM must preserve both
   // references within a skill and links between sibling skills.
-  for (const name of [...sharedSkills, "domain-glossary", "meeting-coach"]) {
+  for (const name of [...sharedSkills, "plantillas-entregables", "user-stories", "domain-glossary", "meeting-coach"]) {
     const entry = join(skillsDir, name, "SKILL.md")
     const text = await readFile(entry, "utf8")
     assert.match(text, new RegExp(`^---\\r?\\nname: ${name}\\r?\\ndescription: .+`, "m"))
     assert.ok(!text.includes("disable-model-invocation:"))
-    const files = [entry, ...(name === "operativa-comun" ? references.map(ref => join(skillsDir, name, "references", ref)) : [])]
+    const files = (await readdir(join(skillsDir, name), { recursive: true }))
+      .filter(file => file.endsWith(".md")).map(file => join(skillsDir, name, file))
     for (const file of files) {
       const body = await readFile(file, "utf8")
       for (const [, target] of body.matchAll(/\]\(([^)#]+\.md)(?:#[^)]*)?\)/g))
@@ -236,8 +237,12 @@ test("contrato documental: consulta puntual anterior al arranque y refinamiento 
   for (const required of ["Salida estándar", "Conversión temporal", "lectura parcial", "Elimina solo los temporales propios", "nunca el temporal"])
     assert.ok(reading.includes(required), required)
   const meeting = await skill("meeting-coach")
-  assert.match(meeting, /aprobacion explicita/)
-  assert.match(meeting, /consentimiento explicito/)
+  assert.match(meeting, /invocación manual/)
+  assert.match(meeting, /\]\(references\/fuentes-privacidad\.md\)/)
+  const privacy = await readFile(join(source, ".apm", "skills", "meeting-coach", "references", "fuentes-privacidad.md"), "utf8")
+  assert.match(privacy, /aprobación explícita/)
+  assert.match(privacy, /consentimiento explícito/)
+  assert.match(privacy, /\]\(\.\.\/\.\.\/lectura-documental\/SKILL\.md\)/)
   const publication = await readFile(join(source, ".apm", "skills", "operativa-comun", "references", "publicacion-revision.md"), "utf8")
   for (const required of ["guardado:true", "devuelve siempre el contenido", "versión exacta", "aunque falle", "antes de solicitarla no consume", "Sin historial verificable"])
     assert.ok(publication.includes(required), required)

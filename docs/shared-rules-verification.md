@@ -1,5 +1,7 @@
 # Reglas compartidas: verificación
 
+> **Evidencia histórica del plan 2, 19 de octubre de 2026**, sobre su rama aislada anterior a integrar plantillas. «Siete skills» y las cifras describen esa ejecución. El cierre conjunto consta en [plantillas](deliverable-templates-verification.md#integración-y-cierre); la limpieza posterior, en [instrucciones](agent-instructions-verification.md).
+
 Ejecución del plan 2 sobre la base `15267b1`, rama `work/plan-2-reglas-compartidas`. Entorno: Windows, Node.js 24.18.0, OpenCode 1.19.3 y APM 0.32.0.
 
 El [mapa normativo](../README.md#mapa-normativo-compartido) identifica propietario, consumidores, disparador y cierre de cada regla. Las fuentes son las cuatro skills de `.apm/skills/`; `operativa-comun` mantiene los contratos `references/fuentes-evidencias.md`, `references/configuracion.md` y `references/publicacion-revision.md`. Los agentes conservan sus secuencias y formatos. Las plantillas y `user-stories` corresponden al plan 3.
@@ -37,7 +39,7 @@ HOME/USERPROFILE, AppData, XDG, OpenCode, APM y npm se aíslan por consumidor ba
 
 Esta tabla y la prueba del contrato son verificaciones documentales, no ejecuciones de esos recorridos por un modelo. No se ejecutó Jira real, una investigación con Codegraph, una conversión MarkItDown ni una conversación LLM; esas conductas no se atribuyen a las comprobaciones estructurales o de permisos. No quedan bloqueos de las validaciones obligatorias del plan 2.
 
-## Integración y continuidad
+## Integración y continuidad — contexto de aquella ejecución
 
 El plan 3 puede solaparse en agentes, README y contrato de arquitectura: conserva sus formatos/plantillas y estos punteros y permisos compartidos. `jira_access.test.ts` y `scripts/setup-opencode.mjs` incluyen las adaptaciones de distribución de este plan. El plan 2 se retira tras completar sus comprobaciones; los demás planes permanecen.
 

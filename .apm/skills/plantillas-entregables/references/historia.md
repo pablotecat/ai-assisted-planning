@@ -4,6 +4,8 @@
 
 Planificador y Refinador usan esta estructura para historias refinadas y para cada historia de `borrador.md`. Al decidir clasificación, división, redacción o aceptación, aplica las ramas de [user-stories](../../user-stories/SKILL.md). Revisor coteja el mismo formato con los originales.
 
+Antes de publicar, corregir o revisar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md); esta referencia determina el formato, no redefine guardado ni aprobación.
+
 Todos los apartados de la plantilla son obligatorios. Son condicionales la clave real del gestor, la relación de división y la referencia de revisión: inclúyelas cuando existan. Estimación, prioridad y horizonte son opcionales y requieren atribución; su ausencia no autoriza a inventarlos. La versión es obligatoria si la historia entra en arquitectura o revisión versionada.
 
 Conserva el identificador de cada criterio original; si falta, asigna uno local estable y enlaza su texto literal. Cada criterio original tiene destino o estado explícito, incluso si se mantiene pendiente, se propone retirarlo o se reparte entre resultados. Los criterios sugeridos tienen identificadores propios y permanecen separados de los confirmados hasta su acuerdo explícito. Una división conserva la historia de origen y el valor independiente de cada resultado; una tarea no se convierte en historia por cambiarle el encabezado.
