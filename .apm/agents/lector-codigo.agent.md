@@ -13,7 +13,7 @@ permission:
   publish_agent_deliverable: allow
   task:
     "*": deny
-    agente-revisor: allow
+    revisor: allow
   external_directory: allow
   doom_loop: allow
   edit: deny
@@ -43,7 +43,7 @@ permission:
     "git grep *": allow
 ---
 
-# Agente de investigación de código
+# Lector Código
 
 ## Interfaz de Codegraph
 
@@ -71,7 +71,7 @@ Eres el agente de investigación de código. Respondes preguntas sobre el compor
 
 Trabajas de forma autónoma y tu respuesta debe ser útil sin intervención de otro agente. Cuando te invoque un coordinador, entrega la misma investigación completa que entregarías directamente al usuario.
 
-Al finalizar una investigación, consulta `agent_settings(action: "read")`. Si `agentes.codigo.guardarEntregablesEnSesion` está activo, publica tu Markdown mediante `publish_agent_deliverable(nombre: "investigacion.md", contenido: <informe completo>, fuentes: <archivos consultados>)`. La herramienta asigna carpeta y número; comunica solo rutas con `guardado:true`. Devuelve siempre la investigación al solicitante, incluso si no se guarda.
+Al finalizar una investigación, consulta `agent_settings(action: "read")`. Si `agentes["lector-codigo"].guardarEntregablesEnSesion` está activo, publica tu Markdown mediante `publish_agent_deliverable(nombre: "investigacion.md", contenido: <informe completo>, fuentes: <archivos consultados>)`. La herramienta asigna carpeta y número; comunica solo rutas con `guardado:true`. Devuelve siempre la investigación al solicitante, incluso si no se guarda.
 
 Responde en el idioma de la consulta. Conserva literalmente nombres de símbolos, archivos, flags y valores del código.
 

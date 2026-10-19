@@ -2,6 +2,9 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { readAgentSettings } from "../tools/agent_settings.ts"
 import { setSessionResolver } from "../tools/session_store.ts"
 
+const packageAgents = new Set(["investigador", "lector-codigo", "lector-documentacion", "planificador",
+  "refinador", "arquitecto", "arquitecto-test", "revisor"])
+
 export default (async ({ client, directory }) => {
   async function identity(id: string, messageID?: string) {
     const session = await client.session.get({ path: { id }, query: { directory } })
@@ -21,53 +24,53 @@ export default (async ({ client, directory }) => {
   async function requireTestParent(id: string) {
     const session = await client.session.get({ path: { id }, query: { directory } })
     if (!session.data || session.error || session.data.id !== id || !session.data.parentID)
-      throw new Error("Test requiere delegación de agente-arquitecto")
+      throw new Error("Test requiere delegación de arquitecto")
     const parent = await identity(session.data.parentID)
-    if (parent.agent !== "agente-arquitecto" || parent.directory !== session.data.directory)
-      throw new Error("Test requiere delegación de agente-arquitecto del mismo proyecto")
+    if (parent.agent !== "arquitecto" || parent.directory !== session.data.directory)
+      throw new Error("Test requiere delegación de arquitecto del mismo proyecto")
   }
   return {
     config: async (config) => {
       const settings = await readAgentSettings()
-      const allowed = settings.agentes.coordinador.especialistasPermitidos
-      const coordinator = config.agent?.["agente-coordinador"]
-      if (coordinator) {
-        coordinator.permission ??= {}
-        if (typeof coordinator.permission === "object") {
-          coordinator.permission.task = { "*": "deny",
-            "agente-codigo": allowed.includes("codigo") ? "allow" : "deny",
-            "agente-documentacion": allowed.includes("documentacion") ? "allow" : "deny",
-            "agente-revisor": "allow" }
+      const allowed = settings.agentes.investigador.especialistasPermitidos
+      const investigator = config.agent?.investigador
+      if (investigator) {
+        investigator.permission ??= {}
+        if (typeof investigator.permission === "object") {
+          investigator.permission.task = { "*": "deny",
+            "lector-codigo": allowed.includes("lector-codigo") ? "allow" : "deny",
+            "lector-documentacion": allowed.includes("lector-documentacion") ? "allow" : "deny",
+            revisor: "allow" }
         }
       }
     },
     "chat.params": async (input) => {
-      if (input.agent === "agente-arquitecto-test") await requireTestParent(input.sessionID)
+      if (input.agent === "arquitecto-test") await requireTestParent(input.sessionID)
     },
     "tool.execute.before": async (input, output) => {
       const agent = (await identity(input.sessionID)).agent
       const resumed = input.tool === "task" && output.args?.task_id ? await identity(output.args.task_id) : undefined
       const target = resumed?.agent ?? output.args?.subagent_type
-      if (input.tool === "task" && target === "agente-documentacion" &&
-        ["agente-planificador", "agente-arquitecto"].includes(agent))
-        throw new Error("Planificador y Arquitecto no pueden delegar en agente-documentacion")
-      if (input.tool === "task" && target === "agente-arquitecto-test" && agent !== "agente-arquitecto")
-        throw new Error("Solo agente-arquitecto puede invocar Test")
-      if (agent === "agente-arquitecto-test") {
+      if (input.tool === "task" && target === "lector-documentacion" &&
+        ["planificador", "arquitecto"].includes(agent))
+        throw new Error("Planificador y Arquitecto no pueden delegar en lector-documentacion")
+      if (input.tool === "task" && target === "arquitecto-test" && agent !== "arquitecto")
+        throw new Error("Solo arquitecto puede invocar Test")
+      if (agent === "arquitecto-test") {
         await requireTestParent(input.sessionID)
-        if (input.tool === "task" && target !== "agente-revisor") throw new Error("Test solo delega en agente-revisor")
+        if (input.tool === "task" && target !== "revisor") throw new Error("Test solo delega en revisor")
       }
-      if (!agent.startsWith("agente-")) return
+      if (!packageAgents.has(agent)) return
       if (["edit", "write", "apply_patch"].includes(input.tool)) throw new Error("Escritura local restringida a los publicadores de sesión")
-      if (input.tool === "task" && agent === "agente-coordinador" && target !== "agente-revisor") {
-        const allowed = (await readAgentSettings()).agentes.coordinador.especialistasPermitidos
-        if (!allowed.some((name) => target === `agente-${name}`)) throw new Error("Especialista deshabilitado en agent-settings.json")
+      if (input.tool === "task" && agent === "investigador" && target !== "revisor") {
+        const allowed = (await readAgentSettings()).agentes.investigador.especialistasPermitidos
+        if (!allowed.includes(target)) throw new Error("Especialista deshabilitado en agent-settings.json")
       }
       if (input.tool === "bash") {
         const command = output.args?.command
-        const code = agent === "agente-codigo" && /^(?:codegraph (?:status|query|explore|context|node|callers|callees|files)\b|git (?:status|rev-parse|branch --show-current|log|show|diff|ls-tree|cat-file|blame|grep)\b)/.test(command)
-        const docs = agent === "agente-documentacion" && /^markitdown (?:--version|--help|"[^"\r\n]+")$/.test(command)
-        const test = agent === "agente-arquitecto-test" && /^git (?:status\b|rev-parse\b|branch --show-current$)/.test(command)
+        const code = agent === "lector-codigo" && /^(?:codegraph (?:status|query|explore|context|node|callers|callees|files)\b|git (?:status|rev-parse|branch --show-current|log|show|diff|ls-tree|cat-file|blame|grep)\b)/.test(command)
+        const docs = agent === "lector-documentacion" && /^markitdown (?:--version|--help|"[^"\r\n]+")$/.test(command)
+        const test = agent === "arquitecto-test" && /^git (?:status\b|rev-parse\b|branch --show-current$)/.test(command)
         if (typeof command !== "string" || !(code || docs || test) || /[;|&><`$\r\n]|\s(?:--output(?:=|\s)|--exec(?:=|\s)|--git-dir(?:=|\s)|-o(?:\s|$)|-c\s)/i.test(command))
           throw new Error("Comando de shell no permitido para estos agentes")
       }

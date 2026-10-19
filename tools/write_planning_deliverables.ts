@@ -12,7 +12,7 @@ export default tool({
     decisiones: tool.schema.array(tool.schema.string()).optional().describe("Decisiones relevantes para el índice de sesión"),
   },
   async execute(args, context) {
-    if (context.agent !== "agente-planificador") throw new Error("Solo agente-planificador puede publicar historias")
+    if (context.agent !== "planificador") throw new Error("Solo planificador puede publicar historias")
     const historias = args.historias.map((item) => ({ ...item, clave: item.clave.trim() }))
     if (historias.some((item) => !/^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u.test(item.clave) || !item.contenido.trim() || !item.incidencias.trim()) || !args.incidencias_globales.trim())
       throw new Error("Cada historia necesita identificador simple, contenido e incidencias; el informe global es obligatorio")

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FACTORIES, AREAS, EXAMPLE, TOTAL_TASKS, snapshotAt, pointOnRoute } from "./model.mjs";
 import { beltRectangles } from "./geometry.mjs";
+import { readFile } from "node:fs/promises";
 
 test("dos cadenas completas: documentos → historias refinadas → tareas", () => {
   const [planning, architecture] = FACTORIES;
@@ -19,7 +20,7 @@ test("cada consulta vuelve por su ruta hasta el refinador que la planteó", () =
   for (let i = 0; i < EXAMPLE.refiners; i++) {
     const route = planning.routes.find(r => r.id === `query-${i}`);
     assert.equal(route.from, `refiner-${i}`);
-    assert.match(route.to, /^coordinator-/);
+    assert.match(route.to, /^investigator-/);
     assert.ok(planning.packets.some(p => p.route === route.id && p.kind === "question" && !p.reverse));
     assert.ok(planning.packets.some(p => p.route === route.id && p.kind === "answer" && p.reverse));
     const answer = planning.packets.find(p => p.route === route.id && p.kind === "answer");
@@ -81,5 +82,21 @@ test("cada fotograma mantiene papeles sobre transportadores, sin atravesar estac
         assert.ok(Math.abs(a.point[0] - b.point[0]) >= 10 - 1e-6 || Math.abs(a.point[1] - b.point[1]) >= 8 - 1e-6, `${line.id} ${frame / 60}: choque ${a.id} / ${b.id}`);
       }
     }
+  }
+});
+
+test("los dos HTML distribuidos contienen el modelo, los nombres y las etiquetas accesibles vigentes", async () => {
+  const source = (await readFile(new URL("./model.mjs", import.meta.url), "utf8")).replace(/^export /gm, "");
+  const live = await readFile(new URL("./live.mjs", import.meta.url), "utf8");
+  for (const filename of ["index.html", "index-light.html"]) {
+    const html = await readFile(new URL(filename, import.meta.url), "utf8");
+    assert.ok(html.includes(source), `${filename}: modelo embebido`);
+    assert.ok(html.includes(live), `${filename}: interacción`);
+    for (const line of FACTORIES) for (const node of line.nodes) {
+      assert.ok(html.includes(`data-station="${node.id}"`), `${filename}: ${node.id}`);
+      assert.ok(html.includes(`aria-label="${node.name}: ${node.detail}"`), `${filename}: accesibilidad ${node.id}`);
+    }
+    assert.doesNotMatch(html, /coordinator|coordinador|Coordinador/);
+    assert.ok(html.includes("Responder al investigador"));
   }
 });

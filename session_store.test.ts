@@ -10,9 +10,9 @@ test("arquitecto publica planes versionados y respeta su interruptor de guardado
   const dir = await mkdtemp(join(tmpdir(), "planning-architecture-session-"))
   const settingsPath = join(dir, "settings.json")
   const opts = { root: join(dir, "sesiones"), settingsPath,
-    get: async (id: string): Promise<Identity> => ({ id, agent: "agente-arquitecto",
+    get: async (id: string): Promise<Identity> => ({ id, agent: "arquitecto",
       title: "Implementación de pagos", created: Date.UTC(2026, 9, 9), directory: dir }) }
-  const input = { sessionID: "architecture", agent: "agente-arquitecto", topic: "implementación",
+  const input = { sessionID: "architecture", agent: "arquitecto", topic: "implementación",
     files: { "plan-implementacion.md": "encargos pendientes" }, sources: ["HISTORIA-1.md", "HISTORIA-2.md"],
     decisions: ["Gestor opcional"] }
   try {
@@ -34,29 +34,29 @@ test("arquitecto publica planes versionados y respeta su interruptor de guardado
     settings.agentes.arquitecto.guardarEntregablesEnSesion = false
     await writeFile(settingsPath, JSON.stringify(settings))
     assert.deepEqual(await publishSession(input, opts), { guardado: false })
-    await assert.rejects(publishSession({ ...input, agent: "agente-planificador" }, opts), /Autor/)
+    await assert.rejects(publishSession({ ...input, agent: "planificador" }, opts), /Autor/)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
-test("Documentación solo publica delegaciones del Coordinador o de Documentación", async () => {
+test("Lector Documentación solo publica delegaciones del Investigador o de Lector Documentación", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-jira-delegation-"))
   const base = { title: "Fuentes Jira", created: Date.UTC(2026, 9, 17), directory: dir }
-  const managers = ["coordinador", "planificador", "arquitecto"]
+  const managers = ["investigador", "planificador", "arquitecto"]
   const nodes: Record<string, Identity> = {}
   for (const name of managers) {
-    nodes[name] = { ...base, id: name, agent: `agente-${name}` }
-    nodes[`${name}-docs`] = { ...base, id: `${name}-docs`, parentID: name, agent: "agente-documentacion" }
+    nodes[name] = { ...base, id: name, agent: name }
+    nodes[`${name}-docs`] = { ...base, id: `${name}-docs`, parentID: name, agent: "lector-documentacion" }
   }
-  nodes.codigo = { ...base, id: "codigo", agent: "agente-codigo" }
-  nodes.wrongDocs = { ...base, id: "wrongDocs", parentID: "codigo", agent: "agente-documentacion" }
-  nodes.childDocs = { ...base, id: "childDocs", parentID: "coordinador-docs", agent: "agente-documentacion" }
+  nodes.codigo = { ...base, id: "codigo", agent: "lector-codigo" }
+  nodes.wrongDocs = { ...base, id: "wrongDocs", parentID: "codigo", agent: "lector-documentacion" }
+  nodes.childDocs = { ...base, id: "childDocs", parentID: "investigador-docs", agent: "lector-documentacion" }
   const settingsPath = join(dir, "settings.json")
   const opts = { root: join(dir, "sesiones"), settingsPath, get: async (id: string) => nodes[id] }
-  const input = { agent: "agente-documentacion", topic: "APP-1", files: { "fuentes-jira.md": "APP-1: texto íntegro" },
+  const input = { agent: "lector-documentacion", topic: "APP-1", files: { "fuentes-jira.md": "APP-1: texto íntegro" },
     sources: ["https://example.atlassian.net/browse/APP-1"] }
   try {
     for (const name of managers) {
-      if (name !== "coordinador") {
+      if (name !== "investigador") {
         await assert.rejects(publishSession({ ...input, sessionID: `${name}-docs` }, opts), /Delegación no autorizada/)
         continue
       }
@@ -71,11 +71,11 @@ test("Documentación solo publica delegaciones del Coordinador o de Documentaci�
     if (child.guardado) assert.equal(await readFile(child.rutas["fuentes-jira.md"], "utf8"), input.files["fuentes-jira.md"])
     await assert.rejects(publishSession({ ...input, sessionID: "wrongDocs" }, opts), /Delegación no autorizada/)
     const settings = await readAgentSettings(settingsPath)
-    settings.agentes.coordinador.especialistasPermitidos = ["codigo"]
+    settings.agentes.investigador.especialistasPermitidos = ["lector-codigo"]
     await writeFile(settingsPath, JSON.stringify(settings))
     for (const name of managers)
       await assert.rejects(publishSession({ ...input, sessionID: `${name}-docs` }, opts),
-        name === "coordinador" ? /Especialista deshabilitado/ : /Delegación no autorizada/)
+        name === "investigador" ? /Especialista deshabilitado/ : /Delegación no autorizada/)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
@@ -83,14 +83,14 @@ test("Arquitecto → Test → Revisor conserva versiones y revisa el archivo exa
   const dir = await mkdtemp(join(tmpdir(), "planning-test-flow-"))
   const base = { title: "Historia UI", created: Date.UTC(2026, 9, 12), directory: dir }
   const nodes: Record<string, Identity> = {
-    architect: { ...base, id: "architect", agent: "agente-arquitecto" },
-    test: { ...base, id: "test", parentID: "architect", agent: "agente-arquitecto-test" },
-    review: { ...base, id: "review", parentID: "test", agent: "agente-revisor" },
-    globalReview: { ...base, id: "globalReview", parentID: "architect", agent: "agente-revisor" },
+    architect: { ...base, id: "architect", agent: "arquitecto" },
+    test: { ...base, id: "test", parentID: "architect", agent: "arquitecto-test" },
+    review: { ...base, id: "review", parentID: "test", agent: "revisor" },
+    globalReview: { ...base, id: "globalReview", parentID: "architect", agent: "revisor" },
   }
   const opts = { root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json"),
     get: async (id: string) => nodes[id] ?? Promise.reject(new Error("Sesión desconocida")) }
-  const input = { sessionID: "test", agent: "agente-arquitecto-test", topic: "HISTORIA-1",
+  const input = { sessionID: "test", agent: "arquitecto-test", topic: "HISTORIA-1",
     files: { "borrador-tests.md": "TC-1: actualizar el resultado esperado. Revisión solicitada: 1." },
     sources: ["HISTORIA-1.md", "tests/flujo-ui.ts"] }
   try {
@@ -123,7 +123,7 @@ test("Arquitecto → Test → Revisor conserva versiones y revisa el archivo exa
     await assert.rejects(publishReview({ sessionID: "review", delivery: first.rutas["borrador-tests.md"], sanity: "Reemplazo" }, opts), { code: "EEXIST" })
     await assert.rejects(publishReview({ sessionID: "globalReview", delivery: second.rutas["borrador-tests.md"], sanity: "Ajeno" }, opts), /no pertenece/)
 
-    const integrated = await publishSession({ sessionID: "architect", agent: "agente-arquitecto", topic: "Plan UI",
+    const integrated = await publishSession({ sessionID: "architect", agent: "arquitecto", topic: "Plan UI",
       files: { "plan-implementacion.md": "TC-1 aprobado con su revisión exacta; Backend y Frontend pendientes." } }, opts)
     assert.equal(integrated.guardado, true)
     if (!integrated.guardado) return
@@ -141,16 +141,16 @@ test("Test exige padre arquitecto y respeta los interruptores de publicación y 
   const dir = await mkdtemp(join(tmpdir(), "planning-test-ownership-"))
   const base = { title: "UI", created: Date.now(), directory: dir }
   const nodes: Record<string, Identity> = {
-    architect: { ...base, id: "architect", agent: "agente-arquitecto" },
-    coordinator: { ...base, id: "coordinator", agent: "agente-coordinador" },
-    direct: { ...base, id: "direct", agent: "agente-arquitecto-test" },
-    wrongParent: { ...base, id: "wrongParent", parentID: "coordinator", agent: "agente-arquitecto-test" },
-    test: { ...base, id: "test", parentID: "architect", agent: "agente-arquitecto-test" },
-    review: { ...base, id: "review", parentID: "test", agent: "agente-revisor" },
+    architect: { ...base, id: "architect", agent: "arquitecto" },
+    investigator: { ...base, id: "investigator", agent: "investigador" },
+    direct: { ...base, id: "direct", agent: "arquitecto-test" },
+    wrongParent: { ...base, id: "wrongParent", parentID: "investigator", agent: "arquitecto-test" },
+    test: { ...base, id: "test", parentID: "architect", agent: "arquitecto-test" },
+    review: { ...base, id: "review", parentID: "test", agent: "revisor" },
   }
   const settingsPath = join(dir, "settings.json")
   const opts = { root: join(dir, "sesiones"), settingsPath, get: async (id: string) => nodes[id] }
-  const input = { sessionID: "test", agent: "agente-arquitecto-test", topic: "UI", files: { "borrador-tests.md": "Caso UI" } }
+  const input = { sessionID: "test", agent: "arquitecto-test", topic: "UI", files: { "borrador-tests.md": "Caso UI" } }
   try {
     await assert.rejects(publishSession({ ...input, sessionID: "direct" }, opts), /requiere delegación/)
     await assert.rejects(publishSession({ ...input, sessionID: "wrongParent" }, opts), /no autorizada/)
@@ -174,22 +174,22 @@ test("Test exige padre arquitecto y respeta los interruptores de publicación y 
 test("originales y revisión pertenecen a la misma sesión y no se sobrescriben", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-session-"))
   const nodes: Record<string, Identity> = {
-    plan: { id: "plan", agent: "agente-planificador", title: "Planificación de pagos", created: Date.UTC(2026, 8, 30), directory: dir },
-    review: { id: "review", parentID: "plan", agent: "agente-revisor", title: "Revisión", created: 1, directory: dir },
-    other: { id: "other", agent: "agente-codigo", title: "Consulta", created: 1, directory: dir },
+    plan: { id: "plan", agent: "planificador", title: "Planificación de pagos", created: Date.UTC(2026, 8, 30), directory: dir },
+    review: { id: "review", parentID: "plan", agent: "revisor", title: "Revisión", created: 1, directory: dir },
+    other: { id: "other", agent: "lector-codigo", title: "Consulta", created: 1, directory: dir },
   }
   const opts = { root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json"),
     get: async (id: string) => nodes[id] ?? Promise.reject(new Error("Sesión desconocida")) }
   try {
-    const originals = await publishSession({ sessionID: "plan", agent: "agente-planificador", topic: "Pagos",
+    const originals = await publishSession({ sessionID: "plan", agent: "planificador", topic: "Pagos",
       group: "Originales", files: { "PAGO-1.md": "Requisito recibido" } }, opts)
     assert.equal(originals.guardado, true)
     if (!originals.guardado) return
-    await assert.rejects(publishSession({ sessionID: "plan", agent: "agente-planificador", topic: "Pagos",
+    await assert.rejects(publishSession({ sessionID: "plan", agent: "planificador", topic: "Pagos",
       group: "Originales", files: { "PAGO-1.md": "Modificado" } }, opts), /ya están publicados/)
-    await assert.rejects(publishSession({ sessionID: "other", agent: "agente-codigo", topic: "Pagos",
+    await assert.rejects(publishSession({ sessionID: "other", agent: "lector-codigo", topic: "Pagos",
       group: "Originales", files: { "PAGO-1.md": "Ajeno" } }, opts), /Solo el planificador/)
-    const first = await publishSession({ sessionID: "plan", agent: "agente-planificador", topic: "Pagos",
+    const first = await publishSession({ sessionID: "plan", agent: "planificador", topic: "Pagos",
       group: "entrega", files: { "PAGO-1.md": "Historia refinada" } }, opts)
     assert.equal(first.guardado, true)
     if (!first.guardado) return

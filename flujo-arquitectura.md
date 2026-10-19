@@ -4,17 +4,17 @@
 
 Convertir historias refinadas y revisadas en borradores de bloques de trabajo Backend, Frontend y Test. El usuario crea manualmente las subtareas y tests en su gestor de tareas, incluido Jira si lo utiliza. Cada bloque pertenece a una sola historia padre; otras historias pueden citarse como relacionadas. Backend y Frontend entregarán bloques que el equipo todavía deberá descomponer; Test entrega casos concretos con su encaje técnico. La precisión de tareas y estimaciones se afinará mediante iteraciones; las estimaciones sin fundamento quedan pendientes.
 
-La fuente oficial V1 es una versión identificada de los archivos locales recibidos. Se conservan los identificadores originales; si faltan, se asignan identificadores locales estables. No se requieren claves Jira. Si una fuente no tiene versión, el usuario confirma una etiqueta para el contenido recibido; en continuaciones se contrasta de nuevo el archivo. `agente-arquitecto` puede consultar Jira directamente en solo lectura como contexto funcional complementario, con citas y alcance explícitos. La entrada oficial desde gestores de tareas y la publicación automática quedan para fases posteriores. El flujo toma decisiones técnicas; las contradicciones funcionales y las cuestiones sin resolver se comunican al usuario a través de `agente-arquitecto`.
+La fuente oficial V1 es una versión identificada de los archivos locales recibidos. Se conservan los identificadores originales; si faltan, se asignan identificadores locales estables. No se requieren claves Jira. Si una fuente no tiene versión, el usuario confirma una etiqueta para el contenido recibido; en continuaciones se contrasta de nuevo el archivo. `arquitecto` puede consultar Jira directamente en solo lectura como contexto funcional complementario, con citas y alcance explícitos. La entrada oficial desde gestores de tareas y la publicación automática quedan para fases posteriores. El flujo toma decisiones técnicas; las contradicciones funcionales y las cuestiones sin resolver se comunican al usuario a través de `arquitecto`.
 
 ## Responsabilidades y recorrido
 
-1. `agente-arquitecto` lee las historias del encargo, mantiene la visión global, identifica trabajo compartido y prepara encargos acotados por historia y especialidad.
+1. `arquitecto` lee las historias del encargo, mantiene la visión global, identifica trabajo compartido y prepara encargos acotados por historia y especialidad.
 2. Los arquitectos Backend, Frontend y Test reciben los criterios y reglas relevantes, no el conjunto completo de historias por defecto. El mecanismo previsto de acceso al código es el proveedor. En la iteración vigente, Test accede directamente y en solo lectura al proyecto de Test indicado en el encargo; esta vía temporal permite perfilarlo mientras se implementa el proveedor.
 3. El proveedor facilita a cada especialista acceso a todo el código de su propia área. Backend no recibe código Frontend; Frontend no recibe los tests E2E. Cada área, incluida Test, mantiene su ámbito. Las necesidades entre áreas se resuelven con datos concretos y trazables, como un endpoint o su contrato, en lugar de exponer el código de la otra área.
 4. Cada especialista publica una versión completa de sus borradores, la remite al revisor, corrige los hallazgos y devuelve al coordinador bloques aprobados y bloqueos. La revisión corresponde a la versión exacta entregada. El revisor es común a los agentes productores y recibe el encargo y las fuentes pertinentes al tipo de entrega.
-5. `agente-arquitecto` verifica cobertura y coherencia global, evita duplicaciones y entrega lo aprobado e independiente junto con todos los bloqueos para resolución.
+5. `arquitecto` verifica cobertura y coherencia global, evita duplicaciones y entrega lo aprobado e independiente junto con todos los bloqueos para resolución.
 
-El coordinador no reemplaza el análisis técnico ni la revisión cuando falta una capacidad. Test se invoca exclusivamente desde `agente-arquitecto`; sus cuestiones se devuelven al coordinador para resolución. La configuración de permisos y publicación de cada nuevo especialista y del proveedor se incorporará al crearlos.
+El coordinador no reemplaza el análisis técnico ni la revisión cuando falta una capacidad. Test se invoca exclusivamente desde `arquitecto`; sus cuestiones se devuelven al coordinador para resolución. La configuración de permisos y publicación de cada nuevo especialista y del proveedor se incorporará al crearlos.
 
 ## Revisión y estados
 
@@ -85,7 +85,7 @@ Si una sección está vacía, indícalo. La entrega parcial conserva todas las h
 
 ## Fase vigente y continuación
 
-La primera fase incorporó `agente-arquitecto`, su configuración y la integración con el publicador de sesión. La iteración vigente incorpora `agente-arquitecto-test` para casos UI, su acceso directo temporal al proyecto de Test y la revisión de sus versiones publicadas. Backend, Frontend y el proveedor siguen pendientes. La entrega integrada puede contener casos de Test revisados y encargos pendientes de las otras especialidades; la cobertura global conserva ese carácter parcial.
+La primera fase incorporó `arquitecto`, su configuración y la integración con el publicador de sesión. La iteración vigente incorpora `arquitecto-test` para casos UI, su acceso directo temporal al proyecto de Test y la revisión de sus versiones publicadas. Backend, Frontend y el proveedor siguen pendientes. La entrega integrada puede contener casos de Test revisados y encargos pendientes de las otras especialidades; la cobertura global conserva ese carácter parcial.
 
 El siguiente hito de validación es perfilar Test con historias locales reales y su proyecto: crear un caso, actualizar otro existente y comprobar negativos, límites y matrices cuando procedan. Las comprobaciones del paquete verifican configuración, procedencia, publicación y revisión; no acreditan por sí solas la calidad del diseño del especialista.
 

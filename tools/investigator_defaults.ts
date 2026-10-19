@@ -20,7 +20,7 @@ export default tool({
   description: "Consulta los valores del proyecto y la rama actual; guarda únicamente valores aún vacíos confirmados por el usuario.",
   args: { action: tool.schema.enum(["read", "saveMissing"]), values: values.optional(), workspace: tool.schema.string().optional() },
   async execute(args, context) {
-    if (context.agent !== "agente-coordinador") throw new Error("Solo agente-coordinador puede gestionar estos valores")
+    if (context.agent !== "investigador") throw new Error("Solo investigador puede gestionar estos valores")
     if (args.action === "saveMissing" && !args.values) throw new Error("Faltan valores confirmados")
     const mapped = args.values && {
       ...(args.values.WORKSPACE && { repositorio: args.values.WORKSPACE }),
@@ -33,9 +33,9 @@ export default tool({
       defaults: {
         WORKSPACE: project.repositorio, REFERENCIA_SOLICITADA: project.referencia,
         LOCAL_DOCUMENT_ROOTS: project.carpetasDocumentales,
-        MAX_REPREGUNTAS_ESPECIALISTAS: settings.agentes.coordinador.maxRepreguntasEspecialistas,
-        especialistasPermitidos: settings.agentes.coordinador.especialistasPermitidos,
-        guardarEntregablesEnSesion: settings.agentes.coordinador.guardarEntregablesEnSesion,
+        MAX_REPREGUNTAS_ESPECIALISTAS: settings.agentes.investigador.maxRepreguntasEspecialistas,
+        especialistasPermitidos: settings.agentes.investigador.especialistasPermitidos,
+        guardarEntregablesEnSesion: settings.agentes.investigador.guardarEntregablesEnSesion,
       },
       missing: Object.entries(project).filter(([key, value]) => key !== "claveProyectoJira" && (!value || (Array.isArray(value) && !value.length))).map(([key]) => key),
       branchDefaultSuggested: branch(project.repositorio), branchActual: branch(args.workspace ?? project.repositorio),

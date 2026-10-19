@@ -2,6 +2,15 @@
 
 Se verifica el recorrido funcional solicitado: planificación completa y arquitectura completa en dos cadenas.
 
+## Renombrado · 19 de octubre de 2026
+
+- 6 pruebas del modelo correctas, incluida la correspondencia del modelo, interacción y etiquetas accesibles con ambos HTML distribuidos.
+- 2 comprobaciones de navegador correctas con Playwright 1.56.1 y Microsoft Edge: los 27 pasos, selección y conexiones, nombres actuales y accesibilidad, salidas y consola sin errores.
+- Revisadas las capturas completas clara y oscura bajo `build/`; nombres de lectores en dos líneas y sin solapamientos en la banda de investigación.
+- Piezas, rutas y paquetes físicos comparados con la revisión Git anterior: idénticos en ambos HTML. La sincronización textual se ejecutó con `node docs/agentic-flow/sync-html.mjs`, sin reconstrucción externa de Anatomy.
+
+Las capturas distribuidas en `shots/` y los resultados siguientes son **históricos, del 17 de octubre, anteriores al renombrado**; no representan los nombres actuales. No se han repetido las auditorías externas de Anatomy, las verificaciones móviles ni la reproducción animada de aquella fecha para este cambio textual. [Alcance completo de la migración](../names-migration-verification.md).
+
 ## Resultados · 17 de octubre de 2026
 
 | Comprobación | Resultado |

@@ -14,7 +14,7 @@ export default tool({
   description: "Lee el proyecto Jira preferente, el límite de refinadores y el guardado; con proyectoJira guarda la clave indicada por el usuario solo si está vacía en agent-settings.json.",
   args: { proyectoJira: tool.schema.string().trim().min(1).optional() },
   async execute(args, context) {
-    if (context.agent !== "agente-planificador") throw new Error("Solo agente-planificador puede gestionar estos valores")
+    if (context.agent !== "planificador") throw new Error("Solo planificador puede gestionar estos valores")
     return JSON.stringify(await planningSettings(args.proyectoJira))
   },
 })

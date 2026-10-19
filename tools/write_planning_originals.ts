@@ -5,7 +5,7 @@ export default tool({
   description: "Guarda una copia de los requisitos recibidos en Originales/ antes de delegar; una sola vez por encargo.",
   args: { historias: tool.schema.array(tool.schema.object({ clave: tool.schema.string(), contenido: tool.schema.string() })).min(1) },
   async execute(args, context) {
-    if (context.agent !== "agente-planificador") throw new Error("Solo agente-planificador puede publicar originales")
+    if (context.agent !== "planificador") throw new Error("Solo planificador puede publicar originales")
     const historias = args.historias.map((item) => ({ ...item, clave: item.clave.trim() }))
     if (historias.some((item) => !/^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u.test(item.clave) || !item.contenido.trim()))
       throw new Error("Cada original necesita identificador simple y contenido")

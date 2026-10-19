@@ -4,14 +4,14 @@ Agentes para investigar código y documentación local, refinar historias desde 
 
 | Agente | Responsabilidad |
 |---|---|
-| `agente-codigo` | Investiga un workspace indexado con Codegraph. |
-| `agente-documentacion` | Investiga historias Jira y documentos locales y cita sus fuentes. |
-| `agente-coordinador` | Consulta Jira directamente y contrasta investigación de código y documentación. |
-| `agente-planificador` | Copia requisitos, coordina refinadores y publica historias. |
-| `agente-refinamiento` | Redacta borradores trazables por historia. |
-| `agente-arquitecto` | Lee historias locales revisadas, prepara encargos técnicos e integra bloques y bloqueos. |
-| `agente-arquitecto-test` | Diseña casos funcionales UI y cambios en tests relacionados; lo invoca el arquitecto. |
-| `agente-revisor` | Revisa versiones publicadas y documenta hallazgos. |
+| `lector-codigo` | Investiga un workspace indexado con Codegraph. |
+| `lector-documentacion` | Investiga historias Jira y documentos locales y cita sus fuentes. |
+| `investigador` | Consulta Jira directamente y contrasta investigación de código y documentación. |
+| `planificador` | Copia requisitos, coordina refinadores y publica historias. |
+| `refinador` | Redacta borradores trazables por historia. |
+| `arquitecto` | Lee historias locales revisadas, prepara encargos técnicos e integra bloques y bloqueos. |
+| `arquitecto-test` | Diseña casos funcionales UI y cambios en tests relacionados; lo invoca el arquitecto. |
+| `revisor` | Revisa versiones publicadas y documenta hallazgos. |
 
 ## Explorar el flujo
 
@@ -26,7 +26,7 @@ apm install pablotecat/ai-assisted-planning --target opencode
 node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
 ```
 
-APM instala los agentes y skills. El segundo comando configura sus plugins, herramientas, contrato de arquitectura y dependencias npm para OpenCode; no necesitas descargar este repositorio. Después abre o reinicia OpenCode en esa misma carpeta y llama a `agente-planificador` o `agente-arquitecto` según el flujo.
+APM instala los agentes y skills. El segundo comando configura sus plugins, herramientas, contrato de arquitectura y dependencias npm para OpenCode; no necesitas descargar este repositorio. Después abre o reinicia OpenCode en esa misma carpeta y llama a `planificador` o `arquitecto` según el flujo.
 
 **Actualizar:** desde la misma carpeta, ejecuta:
 
@@ -36,6 +36,18 @@ node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
 ```
 
 Tus ajustes se conservan en `.opencode/agent-settings.json`. Puedes dejar ese archivo como está: el agente pedirá la clave del proyecto Jira o las rutas de código y documentos cuando las necesite.
+
+### Migración de nombres
+
+La actualización sustituye `agente-coordinador` por `investigador`, `agente-codigo` por `lector-codigo`, `agente-documentacion` por `lector-documentacion` y `agente-refinamiento` por `refinador`. Planificador, Arquitecto, Arquitecto Test y Revisor pierden el prefijo `agente-`. La herramienta `coordinator_defaults` pasa a `investigator_defaults`.
+
+El instalador migra una sola vez las claves `coordinador`, `codigo`, `documentacion` y `refinamiento` de `agentes` a sus nombres actuales y los valores de `especialistasPermitidos`. Conserva proyecto, límites, guardado y `sesiones.carpetaRaiz`, incluido su valor por defecto `informes-agente/sesiones`. Las configuraciones anteriores sin proyecto Jira o sin ajustes de arquitectura mantienen sus valores por defecto compatibles.
+
+Si coexisten una clave antigua y la nueva, se aceptan valores equivalentes. Un conflicto identifica las dos claves y sus valores, detiene la instalación y deja intacto `agent-settings.json`: conserva el valor confirmado y repite el segundo comando. El resultado completo se valida antes de la sustitución atómica; repetir la instalación no reescribe una configuración ya canónica.
+
+APM gestiona la retirada de sus agentes mediante la propiedad y los hashes de `apm.lock.yaml`. Conserva ese registro y atiende los avisos de colisiones antes de usar los agentes; no fuerces la sustitución de archivos personalizados. El instalador retira la herramienta antigua solo si coincide con la copia distribuida conocida; conserva las personalizadas y comunica las colisiones de `investigator_defaults.ts`. Su registro de instalación está en `.opencode/ai-assisted-planning-install.json`.
+
+**Cierra y reinicia OpenCode y abre sesiones nuevas después de actualizar.** Los informes, carpetas y registros históricos conservan sus nombres y contenido. Para continuar un encargo, aporta sus documentos anteriores y su handoff: conserva decisiones, versiones e intentos de revisión consumidos; una sesión nueva no reinicia esos contadores. [Evidencias de instalación y migración](docs/names-migration-verification.md).
 
 Para consultas de código, instala Codegraph e indexa el proyecto. Para convertir otros formatos de documentos, instala MarkItDown.
 
@@ -58,33 +70,33 @@ Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo
 
 Ejecuta `opencode mcp auth jira` (o `opencode mcp auth atlassian`) y `opencode mcp list`: el servidor debe aparecer conectado. Conserva una conexión existente funcional con cualquiera de los dos alias. La autenticación y el sitio se resuelven en OpenCode; `agent-settings.json` guarda la clave del proyecto, no las credenciales ni el `cloudId`.
 
-OpenCode forma los nombres `<alias>_<herramienta>`. Coordinador, Planificador, Arquitecto, Refinamiento, Documentación y Revisor deniegan por defecto y permiten, para ambos alias, las familias de lectura `get*`, `list*`, `search*`, `lookup*` y la operación exacta `fetch`. Esto incluye `search` y `searchJiraIssuesUsingJql`; `fetch` requiere un identificador **ARI** recuperado de una fuente verificada, no una clave como `ES-1228`. Los cinco primeros también admiten `atlassianUserInfo`; el Revisor no lo necesita. Código y Arquitecto Test mantienen su contrato sin acceso Jira.
+OpenCode forma los nombres `<alias>_<herramienta>`. Investigador, Planificador, Arquitecto, Refinador, Lector Documentación y Revisor deniegan por defecto y permiten, para ambos alias, las familias de lectura `get*`, `list*`, `search*`, `lookup*` y la operación exacta `fetch`. Esto incluye `search` y `searchJiraIssuesUsingJql`; `fetch` requiere un identificador **ARI** recuperado de una fuente verificada, no una clave como `ES-1228`. Los cinco primeros también admiten `atlassianUserInfo`; el Revisor no lo necesita. Lector Código y Arquitecto Test mantienen su contrato sin acceso Jira.
 
 Los permisos de `discover` y `executeRead` mantienen compatibilidad con servidores que publican ese catálogo diferido. Son opcionales: usa solo las herramientas que publique tu conexión. El catálogo depende de la versión y de las políticas del servidor; la documentación de Atlassian describe las capacidades, pero no demuestra las disponibles en tu sesión. Las creaciones, ediciones, comentarios, transiciones, registro de trabajo, `executeWrite` y `executeDestructive` siguen denegados. En los agentes, las denegaciones amplias preceden a las excepciones: OpenCode aplica la **última regla coincidente**. No añadas un permiso general `jira_*: allow` ni `atlassian_*: allow`.
 
 La instalación y actualización conservan el alias elegido: APM distribuye los permisos de `.apm/agents/`; `setup-opencode.mjs` consulta la configuración efectiva de OpenCode, incluidos los ajustes globales y JSONC, rechaza un endpoint Atlassian conocido bajo un alias distinto y avisa si Jira sigue pendiente. No renombra conexiones ni autentica automáticamente. Una instalación de componentes no equivale a una conexión Jira comprobada. Cierra y reinicia OpenCode después de instalar o actualizar agentes.
 
-El acceso Jira del Coordinador es independiente de `agentes.coordinador.especialistasPermitidos`, que limita sus delegaciones. Solo Coordinador y Documentación pueden invocar a `agente-documentacion`. Las fuentes vigentes de agentes son `.apm/agents/`; las copias externas `agents-old/` y `old/` y los antiguos prompts de recreación son históricos y no forman parte de esta distribución. En particular, la antigua prohibición de que el Coordinador consulte Jira no pertenece al contrato actual.
+El acceso Jira del Investigador es independiente de `agentes.investigador.especialistasPermitidos`, que limita sus delegaciones a `lector-codigo` y `lector-documentacion`. Solo Investigador y Lector Documentación pueden invocar a `lector-documentacion`. Las fuentes vigentes de agentes son `.apm/agents/`; las copias externas `agents-old/` y `old/` y los antiguos prompts de recreación son históricos y no forman parte de esta distribución. En particular, la antigua prohibición de acceso Jira del rol de investigación no pertenece al contrato actual.
 
-Coordinador, Planificador y Arquitecto comparten `agent_settings`: pueden leer el JSON y completar, tras confirmación, los campos vacíos `proyecto.claveProyectoJira`, `proyecto.repositorio`, `proyecto.referencia` y `proyecto.carpetasDocumentales`. El guardado conserva los valores ya informados. Las herramientas específicas son exclusivas de su agente:
+Investigador, Planificador y Arquitecto comparten `agent_settings`: pueden leer el JSON y completar, tras confirmación, los campos vacíos `proyecto.claveProyectoJira`, `proyecto.repositorio`, `proyecto.referencia` y `proyecto.carpetasDocumentales`. El guardado conserva los valores ya informados. Las herramientas específicas son exclusivas de su agente:
 
 | Agente | Herramienta propia | Ajustes en `.opencode/agent-settings.json` |
 |---|---|---|
-| Coordinador | `coordinator_defaults` | `agentes.coordinador` |
+| Investigador | `investigator_defaults` | `agentes.investigador` |
 | Planificador | `planning_settings` | `agentes.planificador` |
 | Arquitecto | `architecture_settings` | `agentes.arquitecto` |
 
 ## Uso
 
-**Consulta puntual:** «Lee la historia Jira ES-1228 y dime su título, no hagas nada más que decirme su título» consulta únicamente `summary` y devuelve su valor literal. La clave delimita la lectura, sin seleccionar proyecto o sprint ni configurar valores por defecto. Se reutilizan el sitio y `cloudId` verificados; solo se pide la información de acceso indispensable que falte. La consulta termina con la respuesta, sin refinamiento, originales, publicaciones, revisión ni escrituras de configuración. Coordinador, Arquitecto y Documentación aplican la misma proporcionalidad para consultas compatibles con su rol.
+**Consulta puntual:** «Lee la historia Jira ES-1228 y dime su título, no hagas nada más que decirme su título» consulta únicamente `summary` y devuelve su valor literal. La clave delimita la lectura, sin seleccionar proyecto o sprint ni configurar valores por defecto. Se reutilizan el sitio y `cloudId` verificados; solo se pide la información de acceso indispensable que falte. La consulta termina con la respuesta, sin refinamiento, originales, publicaciones, revisión ni escrituras de configuración. Investigador, Arquitecto y Lector Documentación aplican la misma proporcionalidad para consultas compatibles con su rol.
 
-**Refinamiento explícito:** `agente-planificador` busca directamente en Jira las historias del proyecto configurado en `proyecto.claveProyectoJira` de `.opencode/agent-settings.json`. Si está vacío, pide la clave del proyecto al usuario y la guarda para futuros encargos. Puedes indicar claves de historias, un filtro o un sprint para acotar la revisión; un proyecto distinto indicado para un encargo se usa en ese encargo. Las configuraciones anteriores sin este campo se leen como proyecto pendiente de indicar. El planificador recupera el contenido íntegro, publica los originales y delega el refinamiento.
+**Refinamiento explícito:** `planificador` busca directamente en Jira las historias del proyecto configurado en `proyecto.claveProyectoJira` de `.opencode/agent-settings.json`. Si está vacío, pide la clave del proyecto al usuario y la guarda para futuros encargos. Puedes indicar claves de historias, un filtro o un sprint para acotar la revisión; un proyecto distinto indicado para un encargo se usa en ese encargo. Las configuraciones anteriores sin este campo se leen como proyecto pendiente de indicar. El planificador recupera el contenido íntegro, publica los originales y delega el refinamiento.
 
-También puedes aportar texto, archivos u otro formato y pedir explícitamente que revise esas historias: esa petición tiene prioridad y puede ejecutarse sin configurar Jira. El planificador conserva copias en `Originales/`, delega borradores, publica historias e incidencias en `entrega/` y pide al revisor un `sanity-check.md` de esa versión. Las correcciones se publican en `entrega-02/`, etc. Los entregables se guardan en `sesiones.carpetaRaiz` bajo la raíz del proyecto anfitrión (por defecto `informes-agente/sesiones/`). Puedes invocar directamente al coordinador o a los especialistas para consultas independientes.
+También puedes aportar texto, archivos u otro formato y pedir explícitamente que revise esas historias: esa petición tiene prioridad y puede ejecutarse sin configurar Jira. El planificador conserva copias en `Originales/`, delega borradores, publica historias e incidencias en `entrega/` y pide al revisor un `sanity-check.md` de esa versión. Las correcciones se publican en `entrega-02/`, etc. Los entregables se guardan en `sesiones.carpetaRaiz` bajo la raíz del proyecto anfitrión (por defecto `informes-agente/sesiones/`). Puedes invocar directamente al investigador o a los especialistas para consultas independientes.
 
-Para el flujo complementario, selecciona `agente-arquitecto` y facilita rutas de historias locales refinadas y revisadas. Conserva los identificadores de las historias; si no los tienen, asigna etiquetas locales estables. Para Test, aporta también la ruta de su proyecto y la referencia de código que deba analizarse cuando importe. Puedes indicar una carpeta de conocimiento con convenciones, nomenclatura, buenas prácticas y peculiaridades del proyecto: en esta iteración es complementaria, se consulta en solo lectura y su ausencia no bloquea por sí sola el análisis. Si falta una información indispensable, queda pendiente el trabajo afectado. Su escritura se definirá más adelante.
+Para el flujo complementario, selecciona `arquitecto` y facilita rutas de historias locales refinadas y revisadas. Conserva los identificadores de las historias; si no los tienen, asigna etiquetas locales estables. Para Test, aporta también la ruta de su proyecto y la referencia de código que deba analizarse cuando importe. Puedes indicar una carpeta de conocimiento con convenciones, nomenclatura, buenas prácticas y peculiaridades del proyecto: en esta iteración es complementaria, se consulta en solo lectura y su ausencia no bloquea por sí sola el análisis. Si falta una información indispensable, queda pendiente el trabajo afectado. Su escritura se definirá más adelante.
 
-El contrato está en [flujo-arquitectura.md](./flujo-arquitectura.md), instalado también en `.opencode/flujo-arquitectura.md` del proyecto anfitrión. `agente-arquitecto` es el punto de entrada; delega en `agente-arquitecto-test` y publica un `plan-implementacion.md` versionado con cobertura, casos revisados, pendientes y bloqueos. El especialista lee directamente el proyecto de Test y diseña únicamente casos UI: reutiliza o actualiza los relacionados con la historia, propone nuevos casos y matrices fundamentadas, e indica su encaje técnico. Las mejoras de código o de la suite requieren una petición concreta de la historia. Backend, Frontend y el proveedor siguen pendientes; el plan integrado conserva la cobertura global parcial. Los borradores se destinan a la creación manual de subtareas y tests en el gestor elegido, incluido Jira. Estos archivos se generan al ejecutar el flujo con historias concretas; no son documentos precreados en este repositorio.
+El contrato está en [flujo-arquitectura.md](./flujo-arquitectura.md), instalado también en `.opencode/flujo-arquitectura.md` del proyecto anfitrión. `arquitecto` es el punto de entrada; delega en `arquitecto-test` y publica un `plan-implementacion.md` versionado con cobertura, casos revisados, pendientes y bloqueos. El especialista lee directamente el proyecto de Test y diseña únicamente casos UI: reutiliza o actualiza los relacionados con la historia, propone nuevos casos y matrices fundamentadas, e indica su encaje técnico. Las mejoras de código o de la suite requieren una petición concreta de la historia. Backend, Frontend y el proveedor siguen pendientes; el plan integrado conserva la cobertura global parcial. Los borradores se destinan a la creación manual de subtareas y tests en el gestor elegido, incluido Jira. Estos archivos se generan al ejecutar el flujo con historias concretas; no son documentos precreados en este repositorio.
 
 `agentes.arquitecto.maxIntentosRevision` configura las revisiones totales por entrega de especialista, incluida la inicial (por defecto 3); `guardarEntregablesEnSesion` controla su publicación. Las configuraciones anteriores sin el bloque `arquitecto` se leen con los valores por defecto sin reescribirlas. Para continuar un encargo, aporta el último plan y su handoff: conservan versiones, identificadores e intentos consumidos.
 

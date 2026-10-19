@@ -4,7 +4,7 @@ Abre **[index-light.html](index-light.html)** o [index.html](index.html) en el n
 
 ## Fase 1 · Ideas → Historias Refinadas
 
-El planificador lee varios documentos, conserva copias originales y los reparte a los refinadores. Estos hacen consultas concretas a coordinadores, que recurren a Código y Documentación para buscar en **Fuente de Verdad**. Las respuestas vuelven a quien preguntó. Los refinadores deconstruyen y redactan las historias y las devuelven al planificador para su revisión conjunta. Un revisor coteja originales y propuesta antes de dejar la salida en **Historias Refinadas**.
+El planificador lee varios documentos, conserva copias originales y los reparte a los refinadores. Estos hacen consultas concretas a investigadores, que recurren a Lector Código y Lector Documentación para buscar en **Fuente de Verdad**. Las respuestas vuelven a quien preguntó. Los refinadores deconstruyen y redactan las historias y las devuelven al planificador para su revisión conjunta. Un revisor coteja originales y propuesta antes de dejar la salida en **Historias Refinadas**.
 
 Los dos puestos P son el mismo planificador: reparto y revisión del conjunto.
 
@@ -26,7 +26,7 @@ Los dos puestos A son el mismo arquitecto principal: reparto e integración. La 
 - En móvil, desliza horizontalmente cada cadena. Los pasos centran la zona correspondiente. La página conserva su ancho.
 - Con movimiento reducido, los controles muestran los pasos sin reproducción automática.
 
-El ejemplo utiliza tres documentos/historias, tres refinadores, dos coordinadores y tres tareas por especialidad: nueve tareas. Representa el recorrido funcional descrito por el usuario. Las cantidades, paquetes y salidas proceden de `model.mjs`.
+El ejemplo utiliza tres documentos/historias, tres refinadores, dos investigadores y tres tareas por especialidad: nueve tareas. Representa el recorrido funcional descrito por el usuario. Las cantidades, paquetes y salidas proceden de `model.mjs`.
 
 ## Construcción
 
@@ -38,6 +38,8 @@ node build.mjs --audit
 ```
 
 Los HTML generados no requieren servidor, skill ni dependencias npm para abrirse.
+
+Para sincronizar nombres, etiquetas accesibles, pasos y modelo embebido manteniendo las piezas y rutas existentes, ejecuta `node sync-html.mjs`. Este sincronizador usa solo fuentes locales y verifica que las estaciones conservan su geometría. Cambios en geometría o estructura requieren el constructor completo anterior.
 
 ## Verificación
 
