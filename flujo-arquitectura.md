@@ -11,18 +11,14 @@ La fuente oficial V1 es una versión identificada de los archivos locales recibi
 1. `arquitecto` lee las historias del encargo, mantiene la visión global, identifica trabajo compartido y prepara encargos acotados por historia y especialidad.
 2. Los arquitectos Backend, Frontend y Test reciben los criterios y reglas relevantes, no el conjunto completo de historias por defecto. El mecanismo previsto de acceso al código es el proveedor. En la iteración vigente, Test accede directamente y en solo lectura al proyecto de Test indicado en el encargo; esta vía temporal permite perfilarlo mientras se implementa el proveedor.
 3. El proveedor facilita a cada especialista acceso a todo el código de su propia área. Backend no recibe código Frontend; Frontend no recibe los tests E2E. Cada área, incluida Test, mantiene su ámbito. Las necesidades entre áreas se resuelven con datos concretos y trazables, como un endpoint o su contrato, en lugar de exponer el código de la otra área.
-4. Cada especialista publica una versión completa de sus borradores, la remite al revisor, corrige los hallazgos y devuelve al coordinador bloques aprobados y bloqueos. La revisión corresponde a la versión exacta entregada. El revisor es común a los agentes productores y recibe el encargo y las fuentes pertinentes al tipo de entrega.
+4. Cada especialista publica y revisa sus borradores según «Revisión y estados», corrige los hallazgos y devuelve al coordinador bloques aprobados y bloqueos. El revisor es común a los agentes productores y recibe el encargo y las fuentes pertinentes al tipo de entrega.
 5. `arquitecto` verifica cobertura y coherencia global, evita duplicaciones y entrega lo aprobado e independiente junto con todos los bloqueos para resolución.
 
 El coordinador no reemplaza el análisis técnico ni la revisión cuando falta una capacidad. Test se invoca exclusivamente desde `arquitecto`; sus cuestiones se devuelven al coordinador para resolución. La configuración de permisos y publicación de cada nuevo especialista y del proveedor se incorporará al crearlos.
 
 ## Revisión y estados
 
-`agentes.arquitecto.maxIntentosRevision` en `agent-settings.json` limita las revisiones totales por entrega de especialista; valor inicial: **3**. Se cuenta la revisión inicial y cada revisión de una versión corregida. Con valor 3: primer borrador, primera corrección y segunda corrección. Una revisión no verificable no aprueba la entrega y debe comunicarse como bloqueo. Reabrir el mismo encargo conserva el contador; una aprobación parcial no lo reinicia. Si el historial no está disponible, el encargo queda bloqueado para nuevas revisiones hasta recuperarlo.
-
-Al agotar el límite con problemas pendientes, el especialista devuelve el bloqueo y los hallazgos. Los bloques aprobados que no dependan de ese problema siguen adelante. Una modificación material posterior a la aprobación requiere revisar la nueva versión dentro del mismo límite.
-
-La revisión de esta iteración requiere un borrador publicado y un informe del revisor guardado junto a esa versión. Si la publicación falla o el guardado del especialista o del revisor está desactivado, el especialista devuelve el borrador y un bloqueo de revisión. Las versiones publicadas, informes y handoff conservan el historial: por encargo se registran los intentos anteriores, el número de la revisión solicitada, la entrega exacta, el resultado y las rutas confirmadas. La solicitud enviada consume el intento aunque la revisión falle o no pueda verificarse; una publicación fallida antes de solicitar revisión no lo consume.
+Antes de publicar, revisar o reanudar un encargo, carga `operativa-comun` y lee `references/publicacion-revision.md`, incluida «Intentos — solo flujo de arquitectura»: es la definición normativa de guardado, versión exacta, cómputo, historial, agotamiento y fallos. Arquitecto valida y transmite `MAX_INTENTOS_REVISION`, obtenido de `architecture_settings()`, y Test lo aplica por encargo; Revisor registra el número recibido y verifica la versión. Una revisión no verificable deja bloqueado el trabajo afectado. Los casos aprobados independientes pueden continuar tras la comprobación global.
 
 Estados de seguimiento: **pendiente** (trabajo o capacidad aún por completar), **en curso**, **aprobado** (revisión favorable y comprobación global, con dependencias necesarias resueltas), **bloqueado** (requiere resolver un impedimento) y **no aplica** (justificación explícita). Cada criterio debe tener un estado verificable; no se declara cobertura completa por omisión. Una historia sin criterios verificables se registra como bloqueada, con la información que falta.
 
@@ -68,9 +64,9 @@ Un criterio puede requerir varios casos y un caso puede cubrir varios criterios.
 
 ### Entrega y revisión
 
-El especialista publica `borrador-tests.md` completo: identificación del encargo y fuentes/versiones, casos y matrices, cobertura de todos los criterios asignados, bloqueos y cuestiones, e historial de revisiones y siguiente acción. Las correcciones son nuevas versiones completas. Con publicación fallida o desactivada devuelve el contenido y el bloqueo al arquitecto.
+El especialista publica `borrador-tests.md`: identificación del encargo y fuentes/versiones, casos y matrices, cobertura de todos los criterios asignados, bloqueos y cuestiones, e historial de revisiones y siguiente acción. Aplica publicación, versionado y fallos de la referencia compartida.
 
-El revisor comprueba cobertura, fundamento de resultados esperados, pertinencia de negativos y límites, coherencia de matrices, aprovechamiento de casos existentes, encaje técnico y convenciones del proyecto. Su dictamen identifica los casos o variantes aprobados, pendientes o bloqueados y los hallazgos con evidencia. Una aprobación parcial conserva el contador; los casos independientes pueden seguir adelante.
+El revisor comprueba cobertura, fundamento de resultados esperados, pertinencia de negativos y límites, coherencia de matrices, aprovechamiento de casos existentes, encaje técnico y convenciones del proyecto. Su dictamen identifica los casos o variantes aprobados, pendientes o bloqueados y los hallazgos con evidencia.
 
 ## Entrega integrada: `plan-implementacion.md`
 
