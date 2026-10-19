@@ -1,6 +1,7 @@
-export const EXAMPLE = { documents: 3, refiners: 3, coordinators: 2, tasksPerArea: 3 };
+export const EXAMPLE = { documents: 3, refiners: 3, investigators: 2, tasksPerArea: 3 };
 export const AREAS = [{ id: "test", name: "Test", letter: "T" }, { id: "back", name: "Back", letter: "B" }, { id: "front", name: "Front", letter: "F" }];
 export const TOTAL_TASKS = AREAS.length * EXAMPLE.tasksPerArea;
+export const FIGURE_SCOPE = "Hoy: investigación, refinamiento y Test UI con lectura directa de su proyecto, Revisor común y publicación versionada. Previsto: Backend, Frontend y proveedor. Las tres ramas, revisores por rama y nueve tareas son el ejemplo visual, no capacidades instaladas ni resultados reales.";
 
 const station = (id, name, detail, x, y, type = "work", w = 84, agent = id) => ({ id, name, detail, x, y, type, w, d: type === "archive" ? 92 : 38, agent });
 export const portOf = (node, side = "right") => side === "left" ? [node.x - node.w / 2, node.y + 8] : side === "north" ? [node.x, node.y - node.d / 2] : side === "south" ? [node.x, node.y + node.d / 2] : [node.x + node.w / 2, node.y + 8];
@@ -32,10 +33,10 @@ export function planningFactory() {
     station("ideas", "Documentos / ideas", "Varios documentos iniciales", 70, 260, "input", 52),
     station("planner", "Planificador", "P · Lee, copia y distribuye", 225, 260, "scanner", 84, "planificador"),
     ...Array.from({ length: EXAMPLE.refiners }, (_, i) => station(`refiner-${i}`, `Refinador ${i + 1}`, "Deconstruye y redacta", 465, 230 + i * 120, "refiner", 84, "refinador")),
-    station("coordinator-0", "Coordinador 1", "Consulta concreta", 650, 80, "switch", 72, "coordinador"),
-    station("coordinator-1", "Coordinador 2", "Consulta concreta", 785, 80, "switch", 72, "coordinador"),
-    station("code", "Código", "Busca comportamiento", 950, 80, "reader", 64, "codigo"),
-    station("documentation", "Documentación", "Busca reglas e intención", 1070, 80, "reader", 80, "documentacion"),
+    station("investigator-0", "Investigador 1", "Consulta concreta", 650, 80, "switch", 72, "investigador"),
+    station("investigator-1", "Investigador 2", "Consulta concreta", 785, 80, "switch", 72, "investigador"),
+    station("code-reader", "Lector Código", "Busca comportamiento", 950, 80, "reader", 64, "lector-codigo"),
+    station("documentation-reader", "Lector Documentación", "Busca reglas e intención", 1070, 80, "reader", 80, "lector-documentacion"),
     station("truth", "Fuente de Verdad", "Gran almacén de archivos", 1275, 65, "archive", 168),
     station("joint", "Planificador", "P · Revisa todas las historias", 770, 350, "collator", 96, "planificador"),
     station("reviewer", "Revisor", "Originales frente a propuesta", 1060, 350, "reviewer", 104, "revisor"),
@@ -46,13 +47,13 @@ export function planningFactory() {
     ["intake", "ideas", "planner"],
     ["copy", "planner", "originals", [], "documents", "south", "north"],
     ...Array.from({ length: 3 }, (_, i) => [`assign-${i}`, "planner", `refiner-${i}`, [[345, 268], [345, 238 + i * 120]]]),
-    ["query-0", "refiner-0", "coordinator-0", [[555, 238], [555, 88]], "research"],
-    ["query-1", "refiner-1", "coordinator-1", [[555, 358], [555, 30], [725, 30], [725, 88]], "research"],
-    ["query-2", "refiner-2", "coordinator-0", [[555, 478], [555, 88]], "research"],
-    ["ask-code", "coordinator-0", "code", [[705, 88], [705, 145], [900, 145], [900, 88]], "research"],
-    ["ask-docs", "coordinator-1", "documentation", [[840, 88], [840, 165], [1010, 165], [1010, 88]], "research"],
-    ["search-code", "code", "truth", [[950, 10], [1170, 10], [1170, 73]], "research", "north"],
-    ["search-docs", "documentation", "truth", [[1070, 35], [1170, 35], [1170, 73]], "research", "north"],
+    ["query-0", "refiner-0", "investigator-0", [[555, 238], [555, 88]], "research"],
+    ["query-1", "refiner-1", "investigator-1", [[555, 358], [555, 30], [725, 30], [725, 88]], "research"],
+    ["query-2", "refiner-2", "investigator-0", [[555, 478], [555, 88]], "research"],
+    ["ask-code", "investigator-0", "code-reader", [[705, 88], [705, 145], [900, 145], [900, 88]], "research"],
+    ["ask-docs", "investigator-1", "documentation-reader", [[840, 88], [840, 165], [1010, 165], [1010, 88]], "research"],
+    ["search-code", "code-reader", "truth", [[950, 10], [1170, 10], [1170, 73]], "research", "north"],
+    ["search-docs", "documentation-reader", "truth", [[1070, 35], [1170, 35], [1170, 73]], "research", "north"],
     ...Array.from({ length: 3 }, (_, i) => [`draft-${i}`, `refiner-${i}`, "joint", [[620, 238 + i * 120], [620, 358]]]),
     ["proposal", "joint", "reviewer"],
     ["compare-originals", "originals", "reviewer", [[285, 543], [285, 590], [970, 590], [970, 358]]],
@@ -62,12 +63,12 @@ export function planningFactory() {
     ["Entrar y leer", "Varios documentos iniciales llegan al planificador, que lee el encargo y organiza el trabajo.", ["ideas", "planner"]],
     ["Conservar los originales", "El planificador hace una copia fiel de cada documento y conserva los originales para el cotejo final.", ["planner", "originals"]],
     ["Repartir copias", "El planificador envía los documentos a los refinadores. Varias historias se trabajan en paralelo.", ["planner", "refiner-0", "refiner-1", "refiner-2"]],
-    ["Preguntar con precisión", "Los refinadores envían consultas concretas a los coordinadores: una regla, una excepción o un comportamiento que necesitan aclarar.", ["refiner-0", "refiner-1", "refiner-2", "coordinator-0", "coordinator-1"]],
-    ["Encargar la investigación", "Los coordinadores recurren a Código y Documentación para resolver las preguntas recibidas.", ["coordinator-0", "coordinator-1", "code", "documentation"]],
-    ["Buscar en Fuente de Verdad", "Los agentes de Código y Documentación buscan los archivos pertinentes en el gran almacén Fuente de Verdad.", ["code", "documentation", "truth"]],
-    ["Recuperar las evidencias", "Los fragmentos de código y documentos relevantes salen del almacén hacia los especialistas que los buscaron.", ["truth", "code", "documentation"]],
-    ["Responder al coordinador", "Código y Documentación devuelven sus hallazgos. El coordinador reúne una respuesta concreta para la pregunta recibida.", ["code", "documentation", "coordinator-0", "coordinator-1"]],
-    ["Devolver las respuestas", "Las respuestas vuelven hasta cada refinador que preguntó, por el mismo recorrido de la consulta.", ["coordinator-0", "coordinator-1", "refiner-0", "refiner-1", "refiner-2"]],
+    ["Preguntar con precisión", "Los refinadores envían consultas concretas a los investigadores: una regla, una excepción o un comportamiento que necesitan aclarar.", ["refiner-0", "refiner-1", "refiner-2", "investigator-0", "investigator-1"]],
+    ["Encargar la investigación", "Los investigadores recurren a Lector Código y Lector Documentación para resolver las preguntas recibidas.", ["investigator-0", "investigator-1", "code-reader", "documentation-reader"]],
+    ["Buscar en Fuente de Verdad", "Lector Código y Lector Documentación buscan los archivos pertinentes en el gran almacén Fuente de Verdad.", ["code-reader", "documentation-reader", "truth"]],
+    ["Recuperar las evidencias", "Los fragmentos de código y documentos relevantes salen del almacén hacia los especialistas que los buscaron.", ["truth", "code-reader", "documentation-reader"]],
+    ["Responder al investigador", "Lector Código y Lector Documentación devuelven sus hallazgos. El investigador reúne una respuesta concreta para la pregunta recibida.", ["code-reader", "documentation-reader", "investigator-0", "investigator-1"]],
+    ["Devolver las respuestas", "Las respuestas vuelven hasta cada refinador que preguntó, por el mismo recorrido de la consulta.", ["investigator-0", "investigator-1", "refiner-0", "refiner-1", "refiner-2"]],
     ["Deconstruir y redactar", "Con las respuestas, cada refinador separa reglas, criterios y excepciones y redacta de nuevo su historia.", ["refiner-0", "refiner-1", "refiner-2"], 6],
     ["Devolver los borradores", "Los refinadores envían sus historias reconstruidas al planificador.", ["refiner-0", "refiner-1", "refiner-2", "joint"]],
     ["Revisar el conjunto", "El mismo planificador que repartió las copias revisa ahora todas las propuestas juntas: cobertura, coherencia y relaciones entre historias.", ["joint"]],

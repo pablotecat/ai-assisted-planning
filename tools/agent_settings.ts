@@ -14,20 +14,20 @@ const project = tool.schema.object({
   referencia: tool.schema.string(),
   carpetasDocumentales: tool.schema.array(nonEmpty.refine(isAbsolute)),
 }).strict()
-const permitted = tool.schema.array(tool.schema.enum(["codigo", "documentacion"]))
-  .min(1).max(2).refine((v) => v.length === 1 || (v[0] === "codigo" && v[1] === "documentacion"), "Especialistas repetidos o fuera de orden")
+const permitted = tool.schema.array(tool.schema.enum(["lector-codigo", "lector-documentacion"]))
+  .min(1).max(2).refine((v) => v.length === 1 || (v[0] === "lector-codigo" && v[1] === "lector-documentacion"), "Especialistas repetidos o fuera de orden")
 const saved = tool.schema.object({ guardarEntregablesEnSesion: tool.schema.boolean() })
-const settingsSchema = tool.schema.object({
+export const settingsSchema = tool.schema.object({
   proyecto: project,
   agentes: tool.schema.object({
     arquitecto: saved.extend({ maxIntentosRevision: tool.schema.number().int().positive() })
       .default({ maxIntentosRevision: 3, guardarEntregablesEnSesion: true }),
     "arquitecto-test": saved.default({ guardarEntregablesEnSesion: true }),
     planificador: saved.extend({ maxRefinadoresParalelos: tool.schema.number().int().positive() }),
-    refinamiento: saved.extend({ maxConsultasParalelas: tool.schema.number().int().positive() }),
-    coordinador: saved.extend({ maxRepreguntasEspecialistas: tool.schema.number().int().min(0), especialistasPermitidos: permitted }),
-    codigo: saved,
-    documentacion: saved,
+    refinador: saved.extend({ maxConsultasParalelas: tool.schema.number().int().positive() }),
+    investigador: saved.extend({ maxRepreguntasEspecialistas: tool.schema.number().int().min(0), especialistasPermitidos: permitted }),
+    "lector-codigo": saved,
+    "lector-documentacion": saved,
     revisor: saved,
   }).strict(),
   sesiones: tool.schema.object({ carpetaRaiz: nonEmpty.refine((s) => !isAbsolute(s) && !s.includes(":") && s.split(/[\\/]/).every((part) => part && part !== ".." && part !== "."), "Ruta relativa dentro del proyecto") }).strict(),
@@ -35,7 +35,7 @@ const settingsSchema = tool.schema.object({
 
 export type AgentSettings = ReturnType<typeof settingsSchema.parse>
 export type AgentName = keyof AgentSettings["agentes"]
-export const projectManagers = ["agente-coordinador", "agente-planificador", "agente-arquitecto"]
+export const projectManagers = ["investigador", "planificador", "arquitecto"]
 
 export async function readAgentSettings(path = settingsPath): Promise<AgentSettings> {
   try {
@@ -87,9 +87,9 @@ export function sessionRoot(settings: AgentSettings, root = hostRoot) {
 
 export async function manageAgentSettings(agent: string, action: "read" | "saveMissing",
   values?: Partial<AgentSettings["proyecto"]>, path?: string) {
-  if (![...projectManagers, "agente-refinamiento", "agente-codigo", "agente-documentacion"].includes(agent)) throw new Error("Agente no autorizado")
+  if (![...projectManagers, "refinador", "lector-codigo", "lector-documentacion"].includes(agent)) throw new Error("Agente no autorizado")
   if (action === "saveMissing" && (!projectManagers.includes(agent) || !values))
-    throw new Error("Solo Coordinador, Planificador y Arquitecto guardan datos confirmados; se requieren valores")
+    throw new Error("Solo Investigador, Planificador y Arquitecto guardan datos confirmados; se requieren valores")
   return action === "read" ? readAgentSettings(path) : saveMissingProject(values!, path)
 }
 

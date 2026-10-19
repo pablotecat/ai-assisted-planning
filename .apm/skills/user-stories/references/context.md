@@ -1,27 +1,27 @@
-# Planning and team context
+# Contexto de planificación y equipo
 
-Read the section for the decision at hand.
+Lee la sección correspondiente a la decisión en curso.
 
-## Horizon, priority, and ownership
+## Horizonte, prioridad y responsabilidad
 
-Keep distant work at the outcome level; refine near-term work until the team can plan and deliver it. The product decision-maker chooses value-based order and release tradeoffs using the team's risk and effort information. The delivery team owns estimates and feasible iteration commitments. When outcomes differ in urgency, propose a split and ask that decision-maker to prioritize it. **Stop when:** proposed ordering and commitments are either attributed to their owners or left as questions.
+Mantén el trabajo lejano al nivel de resultados; refina el cercano hasta que el equipo pueda planificarlo y entregarlo. La persona que decide sobre el producto elige el orden por valor y los compromisos entre opciones de lanzamiento con la información de riesgo y esfuerzo del equipo. El equipo de entrega es responsable de las estimaciones y de los compromisos viables de cada iteración. Cuando los resultados tengan distinta urgencia, propón una división y pide a esa persona que los priorice. **Cierre:** el orden y los compromisos propuestos están atribuidos a sus responsables o quedan como preguntas.
 
-## Estimates and investigations
+## Estimaciones e investigaciones
 
-Team members size a story against their own comparable work and discuss divergent assumptions. An estimate from one team, or its velocity, does not transfer to another. Keep forecasts provisional and adjust to actual completion. If domain knowledge is missing, ask the appropriate stakeholder; if technical uncertainty blocks estimation, propose a timeboxed investigation with a question, maximum time, and learning result, then estimate the separately prioritized feature afterwards. Near-term implementation tasks support the story and can help capacity planning; task completion alone is not a delivered outcome. **Stop when:** numbers have a supplied team basis, or remain for the team to determine.
+Los miembros del equipo dimensionan una historia frente a su propio trabajo comparable y contrastan los supuestos divergentes. La estimación o velocidad de un equipo no se traslada a otro. Mantén las previsiones provisionales y ajústalas a la finalización real. Si falta conocimiento del dominio, pregunta al interlocutor adecuado; si la incertidumbre técnica impide estimar, propón una investigación acotada en tiempo con pregunta, duración máxima y aprendizaje esperado; después se estima la funcionalidad, priorizada por separado. Las tareas de implementación cercanas apoyan la historia y pueden ayudar a planificar capacidad; terminar tareas por sí solo no equivale a entregar un resultado. **Cierre:** las cifras tienen una base aportada por el equipo o quedan por determinar por este.
 
-## Completion and changed plans
+## Finalización y cambios de planes
 
-Call a story delivered when it passes its agreed checks. Count only finished stories toward iteration velocity; report partial work separately and distinguish task work remaining from delivered value. Revisit scope, forecasts, and estimates of unfinished work as evidence changes; let the product decision-maker choose priority or scope changes. **Stop when:** accepted outcomes, unfinished work, and revised expectations are distinguishable.
+Considera entregada una historia cuando supera sus comprobaciones acordadas. Cuenta solo historias terminadas en la velocidad de la iteración; informa del trabajo parcial por separado y distingue tareas restantes de valor entregado. Revisa alcance, previsiones y estimaciones del trabajo incompleto cuando cambie la evidencia; la persona que decide sobre el producto elige los cambios de prioridad o alcance. **Cierre:** se distinguen resultados aceptados, trabajo incompleto y expectativas revisadas.
 
-## External agreements
+## Acuerdos externos
 
-When a need spans flows or fixes obligations between systems, use a constraint or interface agreement with its own scope, owner, and verification method, linked to affected stories. Use a focused design or data artifact for details better communicated there. **Stop when:** the agreement has a retrievable home and unresolved decisions have an owner.
+Cuando una necesidad abarque varios flujos o fije obligaciones entre sistemas, usa una restricción o acuerdo de interfaz con alcance, responsable y método de verificación propios, enlazado a las historias afectadas. Usa un artefacto específico de diseño o datos para los detalles que se comuniquen mejor allí. **Cierre:** el acuerdo tiene una ubicación recuperable y las decisiones pendientes tienen responsable.
 
-## Early interface risk
+## Riesgo temprano de interfaz
 
-If changing learned navigation or interaction would disrupt users, identify affected roles and near-term journeys, sketch or prototype the risky organization early, and seek feedback from users or suitable proxies. Retain validated interface constraints; leave speculative details open. **Stop when:** the risky interaction has user-facing evidence or a named decision to seek.
+Si cambiar una navegación o interacción aprendida puede perjudicar a los usuarios, identifica los roles y recorridos cercanos afectados, esboza o prototipa pronto la organización arriesgada y busca feedback de usuarios o representantes adecuados. Conserva las restricciones de interfaz validadas y deja abiertos los detalles especulativos. **Cierre:** la interacción arriesgada tiene evidencia de cara al usuario o una decisión concreta por solicitar.
 
-## Distributed conversations
+## Conversaciones distribuidas
 
-If decisions must survive handoffs, keep current stories, questions, agreed outcomes, and checks in a shared, discoverable record and provide a channel for clarification. Keep the story itself short enough to prompt conversation. **Stop when:** affected people can find the agreement and ask about gaps.
+Si las decisiones deben sobrevivir a los handoffs, conserva las historias vigentes, preguntas, resultados acordados y comprobaciones en un registro compartido y localizable, con un canal de aclaración. Mantén la historia lo bastante breve para iniciar una conversación. **Cierre:** las personas afectadas pueden encontrar el acuerdo y preguntar por sus lagunas.

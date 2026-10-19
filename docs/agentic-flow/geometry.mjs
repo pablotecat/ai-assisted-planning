@@ -34,6 +34,9 @@ export function beltRectangles(routes) {
   return out;
 }
 
+export const stationLabelText = n => n.agent.startsWith("lector-") ? `<tspan x="0" dy="-12">Lector</tspan><tspan x="0" dy="12">${n.name.split(" ").slice(1).join(" ")}</tspan>` : n.name;
+export const planningDescription = "Cadena completa del planificador: documentos, copia de originales, tres refinadores, dos investigadores, Lector Código y Lector Documentación, Fuente de Verdad, revisión conjunta, cotejo y pila de Historias Refinadas.";
+
 export function makeFactoryScene(line, k, G, A) {
   const W = 1460, H = 670;
   const P = k.fitProjection([[0, -70, 0], [1450, 640, 0], [0, 640, -10], [1450, -70, 0], [1275, 19, 108]], W, H, { pad: 31, azimuth: 90, elevation: 52 });
@@ -61,10 +64,10 @@ export function makeFactoryScene(line, k, G, A) {
   function label(n, height) {
     const p = at([n.x, n.y - n.d / 2, height]);
     const width = Math.max(n.name.length * 7, n.detail.length * 5.3) + 16;
-    const research = line.id === "planning" && ["coordinator-0", "coordinator-1", "code", "documentation"].includes(n.id);
+    const research = line.id === "planning" && ["investigator-0", "investigator-1", "code-reader", "documentation-reader"].includes(n.id);
     const x = n.id === "originals" ? p[0] - 100 * P.scale : p[0];
     const y = research ? at([n.x, 10, 0])[1] - 50 : p[1] - 33;
-    labels.push(`<g class="station-label" data-station="${n.id}" role="button" tabindex="0" aria-label="${n.name}: ${n.detail}" transform="translate(${x} ${y})"><text class="station-name" text-anchor="middle">${n.name}</text><text class="station-detail" y="16" text-anchor="middle">${n.detail}</text><rect class="station-hit" x="${-width / 2}" y="-16" width="${width}" height="40" rx="4"/></g>`);
+    labels.push(`<g class="station-label" data-station="${n.id}" role="button" tabindex="0" aria-label="${n.name}: ${n.detail}" transform="translate(${x} ${y})"><text class="station-name" text-anchor="middle">${stationLabelText(n)}</text><text class="station-detail" y="16" text-anchor="middle">${n.detail}</text><rect class="station-hit" x="${-width / 2}" y="-16" width="${width}" height="40" rx="4"/></g>`);
   }
   function pile(n, count, attribute) {
     const plan = { x: n.x - n.w / 2, y: n.y - 19, w: n.w, d: 38, r: 3 };
@@ -151,6 +154,6 @@ export function makeFactoryScene(line, k, G, A) {
   }
   const ordered = [...R.items].sort((a, b) => a.key - b.key);
   const body = `${shadows.join("")}<g data-belt-layer>${ordered.filter(item => item.piece === "conveyors").map(item => item.svg).join("")}</g><g class="route-layer">${routes}</g><g class="packet-layer">${moving.join("")}</g><g data-solid-layer>${ordered.filter(item => item.piece !== "conveyors").map(item => item.svg).join("")}</g><g class="labels-layer">${labels.join("")}</g>`;
-  const svg = k.figureSvg({ width: W, height: H, label: line.id === "planning" ? "Cadena completa del planificador: documentos, copia de originales, tres refinadores, dos coordinadores, Código y Documentación, Fuente de Verdad, revisión conjunta, cotejo y pila de Historias Refinadas." : "Cadena completa de arquitectura: Historias Refinadas, arquitecto principal, Test, Back y Front, proveedor y pila Código, tres revisores, integración del arquitecto principal y pila de Tareas.", body });
+  const svg = k.figureSvg({ width: W, height: H, label: line.id === "planning" ? planningDescription : "Cadena completa de arquitectura: Historias Refinadas, arquitecto principal, Test, Back y Front, proveedor y pila Código, tres revisores, integración del arquitecto principal y pila de Tareas.", body });
   return { svg, P, R, belts, W, H };
 }

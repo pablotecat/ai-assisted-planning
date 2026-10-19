@@ -9,7 +9,7 @@ export default tool({
     disputa: tool.schema.string().optional().describe("Desacuerdo entre productor y revisor, redactado por el revisor"),
   },
   async execute(args, context) {
-    if (context.agent !== "agente-revisor") throw new Error("Solo agente-revisor puede publicar revisiones")
+    if (context.agent !== "revisor") throw new Error("Solo revisor puede publicar revisiones")
     return JSON.stringify(await publishReview({ sessionID: context.sessionID, messageID: context.messageID,
       delivery: args.entrega, sanity: args.sanidad, dispute: args.disputa }))
   },

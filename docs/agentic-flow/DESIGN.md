@@ -1,5 +1,7 @@
 # Hero · Dos cadenas de montaje
 
+**Figura ILUSTRATIVA:** diseño del recorrido visual deseado, no inventario de capacidades instaladas. Hoy: investigación, refinamiento y Arquitecto con Test UI de lectura directa, Revisor común y publicación versionada. Backend, Frontend y proveedor: previstos en [roadmap](../roadmap.md). [Contrato actual](../../flujo-arquitectura.md). El aviso se muestra junto a cada figura en ambos HTML.
+
 ## Concepto, antes de la geometría
 
 Una pequeña línea de fabricación documental: la primera cadena lee y copia ideas, investiga preguntas concretas, recompone historias y coteja originales con la propuesta conjunta; la segunda reparte esas historias entre tres especialidades, suministra código, fabrica tareas y revisa cada rama antes de integrarlas.
@@ -12,9 +14,9 @@ La vista completa muestra todos los agentes, recorridos y almacenes sin reproduc
 
 1. Varios documentos entran en el lector/copiador del planificador.
 2. El planificador conserva originales y reparte copias entre refinadores.
-3. Los refinadores plantean consultas concretas a coordinadores.
-4. Los coordinadores usan agentes de Código y Documentación, que recuperan archivos del gran almacén **Fuente de Verdad**.
-5. Las respuestas vuelven al coordinador y después al refinador que preguntó.
+3. Los refinadores plantean consultas concretas a investigadores.
+4. Los investigadores usan Lector Código y Lector Documentación, que recuperan archivos del gran almacén **Fuente de Verdad**.
+5. Las respuestas vuelven al investigador y después al refinador que preguntó.
 6. Cada refinador deconstruye y redacta de nuevo su historia.
 7. Los borradores vuelven al planificador para su revisión conjunta.
 8. El revisor recibe dos entradas: originales y propuesta del planificador.
@@ -36,7 +38,7 @@ El distribuidor y el integrador representan al **mismo arquitecto principal**, i
 
 ## Ejemplo y modelo
 
-Tres documentos de entrada, tres refinadores, dos coordinadores y tres especialidades. Cada especialidad produce tres tareas: nueve en total. Son cantidades del ejemplo visual. `model.mjs` define nodos, rutas, pasos, paquetes y existencias; tanto la animación como los contadores proceden de ese modelo.
+Tres documentos de entrada, tres refinadores, dos investigadores y tres especialidades. Cada especialidad produce tres tareas: nueve en total. Son cantidades del ejemplo visual. `model.mjs` define nodos, rutas, pasos, paquetes y existencias; tanto la animación como los contadores proceden de ese modelo.
 
 ## Distribución
 
@@ -54,8 +56,8 @@ La Hero contiene dos conjuntos; cada estación se monta sobre una zapata real y 
 |---|---|
 | Lector y copiador | Zapata, caja trasera, tapa, dos apoyos de lectura, rodillo, ficha de entrada, mando y placa |
 | Tres refinadores | Tres zapatas, tres cuerpos, seis guías, nueve tiras de historia que se separan y recomponen, tres mandos |
-| Dos coordinadores | Dos zapatas, dos distribuidores, dos selectores con escalas y coronas |
-| Código y Documentación | Dos zapatas, dos lectores, dos tapas, dos bandejas de extracción y fichas |
+| Dos investigadores | Dos zapatas, dos distribuidores, dos selectores con escalas y coronas |
+| Lector Código y Lector Documentación | Dos zapatas, dos lectores, dos tapas, dos bandejas de extracción y fichas |
 | Fuente de Verdad | Pedestal, respaldo, dos laterales, tres baldas, dos separadores, nueve lotes de archivos, tapas y remaches |
 | Planificador: conjunto | Zapata, cuerpo, mesa de cotejo, tres guías y pila de borradores |
 | Revisor de historias | Zapata, dos lechos de comparación, dos apoyos, puente lector y placa de dictamen |

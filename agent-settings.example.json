@@ -9,10 +9,10 @@
     "arquitecto": { "maxIntentosRevision": 3, "guardarEntregablesEnSesion": true },
     "arquitecto-test": { "guardarEntregablesEnSesion": true },
     "planificador": { "maxRefinadoresParalelos": 10, "guardarEntregablesEnSesion": true },
-    "refinamiento": { "maxConsultasParalelas": 2, "guardarEntregablesEnSesion": true },
-    "coordinador": { "maxRepreguntasEspecialistas": 2, "especialistasPermitidos": ["codigo", "documentacion"], "guardarEntregablesEnSesion": true },
-    "codigo": { "guardarEntregablesEnSesion": true },
-    "documentacion": { "guardarEntregablesEnSesion": true },
+    "refinador": { "maxConsultasParalelas": 2, "guardarEntregablesEnSesion": true },
+    "investigador": { "maxRepreguntasEspecialistas": 2, "especialistasPermitidos": ["lector-codigo", "lector-documentacion"], "guardarEntregablesEnSesion": true },
+    "lector-codigo": { "guardarEntregablesEnSesion": true },
+    "lector-documentacion": { "guardarEntregablesEnSesion": true },
     "revisor": { "guardarEntregablesEnSesion": true }
   },
   "sesiones": { "carpetaRaiz": "informes-agente/sesiones" }

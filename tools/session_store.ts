@@ -9,17 +9,17 @@ let resolver: Resolver | undefined
 export function setSessionResolver(value: Resolver) { resolver = value }
 
 const agentNames: Record<string, AgentName> = {
-  "agente-arquitecto": "arquitecto",
-  "agente-arquitecto-test": "arquitecto-test",
-  "agente-planificador": "planificador", "agente-refinamiento": "refinamiento",
-  "agente-coordinador": "coordinador", "agente-codigo": "codigo", "agente-documentacion": "documentacion",
-  "agente-revisor": "revisor",
+  arquitecto: "arquitecto",
+  "arquitecto-test": "arquitecto-test",
+  planificador: "planificador", refinador: "refinador",
+  investigador: "investigador", "lector-codigo": "lector-codigo", "lector-documentacion": "lector-documentacion",
+  revisor: "revisor",
 }
 const childOf: Record<AgentName, AgentName[]> = {
   arquitecto: [],
   "arquitecto-test": ["arquitecto"],
-  planificador: [], refinamiento: ["planificador"], coordinador: ["refinamiento"],
-  codigo: ["coordinador"], documentacion: ["coordinador", "documentacion"],
+  planificador: [], refinador: ["planificador"], investigador: ["refinador"],
+  "lector-codigo": ["investigador"], "lector-documentacion": ["investigador", "lector-documentacion"],
   revisor: Object.values(agentNames).filter((name) => name !== "revisor"),
 }
 type Entry = { parent?: string; agent: AgentName; folder: string }
@@ -78,7 +78,7 @@ async function chain(id: string, messageID: string | undefined, get: Resolver) {
     current = node.parentID
   }
   nodes.reverse()
-  if (nodes[0].agent === "agente-arquitecto-test") throw new Error("Test requiere delegación de agente-arquitecto")
+  if (nodes[0].agent === "arquitecto-test") throw new Error("Test requiere delegación de arquitecto")
   for (let i = 1; i < nodes.length; i++) {
     if (!childOf[agentNames[nodes[i].agent]].includes(agentNames[nodes[i - 1].agent]))
       throw new Error("Delegación no autorizada")
@@ -149,14 +149,14 @@ export async function publishSession(input: {
   if (!names.length || names.some((name) => !input.files[name]?.trim())) throw new Error("Entregables vacíos")
   names.forEach(safeName)
   if (input.group && input.group !== "Originales" && !/^[a-z][a-z0-9-]*$/.test(input.group)) throw new Error("Grupo no permitido")
-  if (input.group === "Originales" && input.agent !== "agente-planificador") throw new Error("Solo el planificador puede publicar originales")
+  if (input.group === "Originales" && input.agent !== "planificador") throw new Error("Solo el planificador puede publicar originales")
   const nodes = await chain(input.sessionID, input.messageID, options.get ?? resolver ?? (() => { throw new Error("Adaptador de sesión no disponible") }))
   if (nodes.at(-1)!.agent !== input.agent) throw new Error("Autor de publicación diferente")
   const settings = await readAgentSettings(options.settingsPath)
   if (!settings.agentes[agentNames[input.agent]].guardarEntregablesEnSesion) return { guardado: false }
-  if (input.agent === "agente-codigo" && !settings.agentes.coordinador.especialistasPermitidos.includes("codigo") && nodes.length > 1)
+  if (input.agent === "lector-codigo" && !settings.agentes.investigador.especialistasPermitidos.includes("lector-codigo") && nodes.length > 1)
     throw new Error("Especialista deshabilitado")
-  if (input.agent === "agente-documentacion" && !settings.agentes.coordinador.especialistasPermitidos.includes("documentacion") && nodes.some((n) => n.agent === "agente-coordinador"))
+  if (input.agent === "lector-documentacion" && !settings.agentes.investigador.especialistasPermitidos.includes("lector-documentacion") && nodes.some((n) => n.agent === "investigador"))
     throw new Error("Especialista deshabilitado")
 
   const root = options.root ?? sessionRoot(settings)
@@ -286,7 +286,7 @@ export async function publishReview(input: {
   const nodes = await chain(input.sessionID, input.messageID, options.get ?? resolver ?? (() => { throw new Error("Adaptador de sesión no disponible") }))
   const reviewer = nodes.at(-1)!
   const producer = nodes.at(-2)
-  if (reviewer.agent !== "agente-revisor" || !producer) throw new Error("Revisor delegado por un productor requerido")
+  if (reviewer.agent !== "revisor" || !producer) throw new Error("Revisor delegado por un productor requerido")
   const settings = await readAgentSettings(options.settingsPath)
   if (!settings.agentes.revisor.guardarEntregablesEnSesion) return { guardado: false }
   const root = options.root ?? sessionRoot(settings)
