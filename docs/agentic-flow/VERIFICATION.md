@@ -1,6 +1,8 @@
 # Verificación de las dos cadenas
 
-Se verifica el recorrido funcional solicitado: planificación completa y arquitectura completa en dos cadenas.
+**Figura ILUSTRATIVA.** Se verifica la maqueta del recorrido solicitado, no una ejecución de planificación y arquitectura. Backend, Frontend y proveedor son previstos; hoy Arquitecto integra Test UI con lectura directa de su proyecto y Revisor común. [Capacidad actual](../../flujo-arquitectura.md) · [Roadmap](../roadmap.md).
+
+Los resultados fechados siguientes son históricos. La limpieza posterior sincroniza ambos HTML localmente y comprueba modelo y aviso de alcance; sus resultados están en [verificación de instrucciones](../agent-instructions-verification.md).
 
 ## Renombrado · 19 de octubre de 2026
 

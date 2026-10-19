@@ -2,9 +2,9 @@
 
 ## Aplicación y suficiencia
 
-Revisor usa el formato de dictamen para `sanity-check.md`, incluso sin hallazgos, y consulta además la plantilla del contenido revisado. Los nombres efectivos, incluidos prefijos de archivos versionados, los asigna `write_review_documents`. Aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md) al guardar y comprobar rutas; el contrato de arquitectura mantiene las reglas de consumo, límite, reapertura y aprobación parcial.
+Revisor usa el formato de dictamen para `sanity-check.md`, incluso sin hallazgos, y consulta además la plantilla del contenido revisado. Los nombres efectivos, incluidos prefijos de archivos versionados, los asigna `write_review_documents`. Al publicar, comprobar una revisión o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md), única norma de guardado, versión exacta e intentos (consumo, límite, reapertura, aprobación parcial y fallos). El contrato de arquitectura define alcance y estados.
 
-Todos los apartados son obligatorios. Intento, límite e historial son condicionales al flujo que los exige; en arquitectura siempre se conservan. La entrega se identifica por ruta confirmada y versión exacta; para una carpeta, delimita todos sus archivos. Una comprobación decisiva pendiente bloquea únicamente el contenido que depende de ella. Una revisión parcial enumera los aprobados y sus dependencias, lo pendiente y lo bloqueado. Una aprobación no se traslada a contenido modificado.
+Todos los apartados son obligatorios. Intento, límite e historial se incluyen cuando la norma compartida los exige. Identifica la entrega por ruta confirmada y versión exacta; para una carpeta, delimita todos sus archivos. En una revisión parcial enumera aprobados con dependencias, pendientes y bloqueados según la norma y estados aplicables.
 
 **Cierre:** todos los criterios y elementos del alcance tienen resultado o pendiente explícito, cada hallazgo tiene evidencia/impacto/corrección, y el dictamen identifica inequívocamente su versión. El fallo de revisión o guardado conserva el resultado y el bloqueo, sin atribuir informe guardado.
 
@@ -39,7 +39,7 @@ Todos los apartados son obligatorios. Intento, límite e historial son condicion
 
 ## Historial compartido
 
-Encargo, borrador, plan integrado y handoff referencian este registro por encargo. Incluye los intentos anteriores y la solicitud siguiente cuando esté preparada. Es representación documental, no un contador automático de la herramienta. Anota rutas solo cuando estén confirmadas; un resultado desconocido conserva la solicitud y el intento consumido.
+Encargo, borrador, plan integrado y handoff referencian este registro por encargo. Representa los datos exigidos por [Intentos — solo flujo de arquitectura](../../operativa-comun/references/publicacion-revision.md#intentos--solo-flujo-de-arquitectura), incluida la siguiente solicitud cuando esté preparada; esa norma decide el consumo y la continuidad. El registro es documental, no un contador automático de la herramienta.
 
 ```markdown
 **Encargo:** <ENC-ID; task_id disponibles del especialista/revisor>

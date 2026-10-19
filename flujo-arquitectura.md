@@ -2,41 +2,42 @@
 
 ## Propósito y alcance
 
-Convertir historias refinadas y revisadas en borradores de bloques de trabajo Backend, Frontend y Test. El usuario crea manualmente las subtareas y tests en su gestor de tareas, incluido Jira si lo utiliza. Cada bloque pertenece a una sola historia padre; otras historias pueden citarse como relacionadas. Backend y Frontend entregarán bloques que el equipo todavía deberá descomponer; Test entrega casos concretos con su encaje técnico. La precisión de tareas y estimaciones se afinará mediante iteraciones; las estimaciones sin fundamento quedan pendientes.
+Convertir historias locales refinadas y revisadas en un plan integrado con casos funcionales UI de Test revisados, encargos pendientes de capacidad y bloqueos. Están implementados `arquitecto`, `arquitecto-test`, el Revisor común y la publicación versionada. Backend, Frontend y el proveedor siguen pendientes; su evolución se recoge en `docs/roadmap.md` del paquete.
 
-La fuente oficial V1 es una versión identificada de los archivos locales recibidos. Se conservan los identificadores originales; si faltan, se asignan identificadores locales estables. No se requieren claves Jira. Si una fuente no tiene versión, el usuario confirma una etiqueta para el contenido recibido; en continuaciones se contrasta de nuevo el archivo. `arquitecto` puede consultar Jira directamente en solo lectura como contexto funcional complementario, con citas y alcance explícitos. La entrada oficial desde gestores de tareas y la publicación automática quedan para fases posteriores. El flujo toma decisiones técnicas; las contradicciones funcionales y las cuestiones sin resolver se comunican al usuario a través de `arquitecto`.
+El usuario crea manualmente las subtareas y tests en su gestor, incluido Jira. Cada bloque pertenece a una sola historia padre; otras historias pueden citarse como relacionadas. Las estimaciones sin fundamento quedan pendientes.
+
+La fuente oficial V1 es una versión identificada de los archivos locales recibidos. Conserva los identificadores originales; si faltan, asigna identificadores locales estables. No se requieren claves Jira. Si una fuente no tiene versión, el usuario confirma una etiqueta para el contenido recibido; en continuaciones se contrasta de nuevo el archivo. `arquitecto` puede consultar Jira directamente en solo lectura como contexto funcional complementario, con citas y alcance explícitos. El flujo toma decisiones técnicas; las contradicciones funcionales y cuestiones sin resolver se comunican al usuario a través de `arquitecto`.
 
 ## Responsabilidades y recorrido
 
 1. `arquitecto` lee las historias del encargo, mantiene la visión global, identifica trabajo compartido y prepara encargos acotados por historia y especialidad.
-2. Los arquitectos Backend, Frontend y Test reciben los criterios y reglas relevantes, no el conjunto completo de historias por defecto. El mecanismo previsto de acceso al código es el proveedor. En la iteración vigente, Test accede directamente y en solo lectura al proyecto de Test indicado en el encargo; esta vía temporal permite perfilarlo mientras se implementa el proveedor.
-3. El proveedor facilita a cada especialista acceso a todo el código de su propia área. Backend no recibe código Frontend; Frontend no recibe los tests E2E. Cada área, incluida Test, mantiene su ámbito. Las necesidades entre áreas se resuelven con datos concretos y trazables, como un endpoint o su contrato, en lugar de exponer el código de la otra área.
-4. Cada especialista publica y revisa sus borradores según «Revisión y estados», corrige los hallazgos y devuelve al coordinador bloques aprobados y bloqueos. El revisor es común a los agentes productores y recibe el encargo y las fuentes pertinentes al tipo de entrega.
-5. `arquitecto` verifica cobertura y coherencia global, evita duplicaciones y entrega lo aprobado e independiente junto con todos los bloqueos para resolución.
+2. `arquitecto-test` recibe criterios y reglas pertinentes de una historia, lee directamente su proyecto de Test en solo lectura y diseña casos UI con encaje técnico. Las necesidades de otras áreas se resuelven con contratos o datos concretos aportados al encargo, como un endpoint, sin acceso general a código ajeno.
+3. Test publica y solicita revisión de sus borradores según la norma compartida; corrige hallazgos y devuelve al coordinador propuestas revisadas y bloqueos. El Revisor común recibe encargo y fuentes pertinentes.
+4. `arquitecto` comprueba cobertura y coherencia global, evita duplicaciones y entrega lo aprobado e independiente junto con pendientes y bloqueos.
 
-El coordinador no reemplaza el análisis técnico ni la revisión cuando falta una capacidad. Test se invoca exclusivamente desde `arquitecto`; sus cuestiones se devuelven al coordinador para resolución. La configuración de permisos y publicación de cada nuevo especialista y del proveedor se incorporará al crearlos.
+El coordinador conserva como pendientes los encargos sin capacidad técnica y su revisión. Test se invoca exclusivamente desde `arquitecto`; le devuelve sus cuestiones para resolución. La presencia de un nombre en permisos no demuestra que el especialista esté distribuido.
 
 ## Revisión y estados
 
-Antes de publicar, revisar o reanudar un encargo, carga `operativa-comun` y lee `references/publicacion-revision.md`, incluida «Intentos — solo flujo de arquitectura»: es la definición normativa de guardado, versión exacta, cómputo, historial, agotamiento y fallos. Arquitecto valida y transmite `MAX_INTENTOS_REVISION`, obtenido de `architecture_settings()`, y Test lo aplica por encargo; Revisor registra el número recibido y verifica la versión. Una revisión no verificable deja bloqueado el trabajo afectado. Los casos aprobados independientes pueden continuar tras la comprobación global.
+Antes de publicar, revisar o reanudar, carga `operativa-comun` y lee [publicación y revisión](.apm/skills/operativa-comun/references/publicacion-revision.md), incluida «Intentos — solo flujo de arquitectura»: es la definición normativa de guardado, versión exacta, cómputo, historial, agotamiento y fallos. Arquitecto valida y transmite `MAX_INTENTOS_REVISION` de `architecture_settings()`; Test aplica la norma por encargo y Revisor registra y verifica la versión. Los casos revisados favorables e independientes pueden continuar tras la comprobación global.
 
 Estados de seguimiento: **pendiente** (trabajo o capacidad aún por completar), **en curso**, **aprobado** (revisión favorable y comprobación global, con dependencias necesarias resueltas), **bloqueado** (requiere resolver un impedimento) y **no aplica** (justificación explícita). Cada criterio debe tener un estado verificable; no se declara cobertura completa por omisión. Una historia sin criterios verificables se registra como bloqueada, con la información que falta.
 
 ## Encargo mínimo para un especialista
 
-Al preparar o continuar una delegación, carga `plantillas-entregables` y aplica [Encargo](.apm/skills/plantillas-entregables/references/encargo.md), incluida su rama Test cuando corresponda. Esa referencia es la fuente normativa de los campos del paquete; este contrato mantiene el alcance, los estados y el consumo de revisiones. Las referencias de formato de este documento viven en `.apm/skills/plantillas-entregables/` en el paquete y se consultan desde la ubicación de la skill instalada por APM en el consumidor.
+Al preparar o continuar una delegación, carga `plantillas-entregables` y aplica [Encargo](.apm/skills/plantillas-entregables/references/encargo.md), incluida su rama Test cuando corresponda. Esa referencia define los campos; este contrato mantiene alcance, estados y entrega integrada. Los enlaces se resuelven desde este archivo: el instalador adapta `.apm/skills/` del paquete a `../.agents/skills/` desde el contrato instalado en `.opencode/`.
 
-El código actual leído por Test es la evidencia de implementación; se distingue la referencia declarada de la comprobada y se registran los cambios locales conocidos. Backend/Frontend reciben bloques a descomponer; Test, casos concretos. El encargo pendiente de capacidad conserva ese estado y no se presenta como análisis técnico realizado.
+El código actual leído por Test es la evidencia de implementación; distingue la referencia declarada de la comprobada y registra cambios locales conocidos. Un encargo pendiente de capacidad conserva ese estado, separado del análisis técnico realizado.
 
 ## Especialista Test — primera iteración UI
 
-El especialista diseña pruebas funcionales de aceptación a través de la interfaz de usuario. La selección de pruebas unitarias, de integración, API u otros niveles queda para una iteración posterior. Analiza la suite y propone cambios; el equipo implementará y ejecutará los casos.
+El especialista diseña pruebas funcionales de aceptación a través de la interfaz de usuario. Analiza la suite y propone cambios; el equipo implementa y ejecuta los casos. Su alcance actual es UI.
 
 ### Contexto del proyecto
 
-El acceso directo temporal se limita al código y configuración del proyecto de Test y a la documentación o contratos concretos aportados. Los datos necesarios de otras áreas se solicitan a través del arquitecto principal. El especialista consulta metadatos Git de solo lectura para comprobar la referencia cuando sea posible; una referencia no comprobada se identifica como tal.
+El acceso directo se limita al código y configuración del proyecto de Test y a los documentos o contratos concretos aportados. Los datos necesarios de otras áreas se solicitan a través del arquitecto principal. El especialista consulta metadatos Git de solo lectura para comprobar la referencia cuando sea posible; una referencia no comprobada se identifica como tal.
 
-**Carpeta de conocimiento — decisión provisional:** el especialista consulta la carpeta indicada para conocer convenciones, nomenclatura, buenas prácticas y peculiaridades. Inicialmente es una fuente complementaria: si falta o está incompleta, puede continuar con las convenciones comprobables en la suite, identificándolas como observaciones. Cuando falta información indispensable para una decisión, devuelve la cuestión al arquitecto principal y deja pendiente únicamente el trabajo afectado. La escritura y el mantenimiento de esta carpeta se definirán en otra iteración.
+**Carpeta de conocimiento — fuente complementaria:** consulta la carpeta indicada para convenciones, nomenclatura, buenas prácticas y peculiaridades. Si falta o está incompleta, continúa con las convenciones comprobables en la suite, identificadas como observaciones. Si falta información indispensable, devuelve la cuestión al arquitecto principal y deja pendiente solo el trabajo afectado. El acceso vigente a esta carpeta es de solo lectura.
 
 ### Diseño y mantenimiento acotado
 
@@ -67,10 +68,10 @@ Si una sección está vacía, indícalo. La entrega parcial conserva todas las h
 
 ## Fase vigente y continuación
 
-La primera fase incorporó `arquitecto`, su configuración y la integración con el publicador de sesión. La iteración vigente incorpora `arquitecto-test` para casos UI, su acceso directo temporal al proyecto de Test y la revisión de sus versiones publicadas. Backend, Frontend y el proveedor siguen pendientes. La entrega integrada puede contener casos de Test revisados y encargos pendientes de las otras especialidades; la cobertura global conserva ese carácter parcial.
+La entrega integrada actual contiene casos de Test revisados y encargos pendientes de las otras especialidades; la cobertura global conserva ese carácter parcial. Se completa una etapa cuando sus entradas y resultados son verificables o el trabajo afectado tiene un pendiente o bloqueo con causa y siguiente acción.
 
-El siguiente hito de validación es perfilar Test con historias locales reales y su proyecto: crear un caso, actualizar otro existente y comprobar negativos, límites y matrices cuando procedan. Las comprobaciones del paquete verifican configuración, procedencia, publicación y revisión; no acreditan por sí solas la calidad del diseño del especialista.
+Las comprobaciones del paquete verifican configuración, procedencia, publicación y revisión; la calidad del diseño del especialista requiere validación con historias y proyecto reales, descrita en el roadmap del paquete.
 
-Próximas iteraciones: definir la escritura del conocimiento compartido; ampliar los niveles de Test; implementar Backend, Frontend y el proveedor; afinar descomposición y estimaciones; ampliar la entrada oficial desde gestores de tareas y, cuando exista confianza suficiente, valorar la publicación automática. El orden se confirmará con el usuario. Al cerrar cada sesión, la respuesta incluye un handoff con la versión vigente, decisiones, encargos e intentos consumidos, bloqueos y siguiente acción.
+Al cerrar cada sesión, incluye en la respuesta un handoff con versión vigente, decisiones, encargos y `task_id` disponibles, intentos consumidos, bloqueos y siguiente acción. Aplica la continuidad de la norma compartida de publicación y revisión.
 
 Para continuar, el handoff referencia las entregas e informes exactos y el [historial compartido por encargo](.apm/skills/plantillas-entregables/references/revision.md#historial-compartido), incluidos los `task_id` disponibles. Puede permanecer en la respuesta; no requiere un archivo adicional.

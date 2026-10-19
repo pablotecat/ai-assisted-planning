@@ -1,8 +1,10 @@
 # Verificación de plantillas de entregables
 
+> **Evidencia histórica del plan 3 y su integración, 19 de octubre de 2026.** Los fallos aislados se cerraron en la ejecución conjunta de abajo: no son bloqueos actuales. Para la posterior limpieza y las ubicaciones normativas definitivas consulta [verificación de instrucciones](agent-instructions-verification.md).
+
 ## Alcance
 
-La fuente de formato es `.apm/skills/plantillas-entregables/SKILL.md`, con cinco referencias: `historia.md`, `tarea.md`, `encargo.md`, `revision.md` y `caso-test.md`. El catálogo duradero está en el README; los seis apartados del plan integrado y las reglas de estados e intentos permanecen en `flujo-arquitectura.md`.
+La fuente de formato es `.apm/skills/plantillas-entregables/SKILL.md`, con cinco referencias: `historia.md`, `tarea.md`, `encargo.md`, `revision.md` y `caso-test.md`. El catálogo está en el README. En la integración, el contrato retuvo los seis apartados y los estados; la norma de intentos quedó en `operativa-comun/references/publicacion-revision.md`, alcanzable desde el contrato.
 
 Los productores conectados son Planificador, Refinador, Arquitecto y Arquitecto Test, junto al Revisor común. `user-stories` conserva la clasificación y calidad funcional y enlaza Historia; Revisor puede cargar ambas skills. Los otros tres productores conservan sus formatos de investigación, catalogados con sus fuentes. `domain-glossary` y `meeting-coach` mantienen sus formatos especializados.
 

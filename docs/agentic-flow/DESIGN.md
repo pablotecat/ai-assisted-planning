@@ -1,5 +1,7 @@
 # Hero · Dos cadenas de montaje
 
+**Figura ILUSTRATIVA:** diseño del recorrido visual deseado, no inventario de capacidades instaladas. Hoy: investigación, refinamiento y Arquitecto con Test UI de lectura directa, Revisor común y publicación versionada. Backend, Frontend y proveedor: previstos en [roadmap](../roadmap.md). [Contrato actual](../../flujo-arquitectura.md). El aviso se muestra junto a cada figura en ambos HTML.
+
 ## Concepto, antes de la geometría
 
 Una pequeña línea de fabricación documental: la primera cadena lee y copia ideas, investiga preguntas concretas, recompone historias y coteja originales con la propuesta conjunta; la segunda reparte esas historias entre tres especialidades, suministra código, fabrica tareas y revisa cada rama antes de integrarlas.

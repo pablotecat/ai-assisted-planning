@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FACTORIES, AREAS, EXAMPLE, TOTAL_TASKS, snapshotAt, pointOnRoute } from "./model.mjs";
+import { FACTORIES, AREAS, EXAMPLE, TOTAL_TASKS, FIGURE_SCOPE, snapshotAt, pointOnRoute } from "./model.mjs";
 import { beltRectangles } from "./geometry.mjs";
 import { readFile } from "node:fs/promises";
 
@@ -92,6 +92,8 @@ test("los dos HTML distribuidos contienen el modelo, los nombres y las etiquetas
     const html = await readFile(new URL(filename, import.meta.url), "utf8");
     assert.ok(html.includes(source), `${filename}: modelo embebido`);
     assert.ok(html.includes(live), `${filename}: interacción`);
+    assert.equal([...html.matchAll(/data-flow-scope><strong>ILUSTRATIVA\.<\/strong>/g)].length, 2, `${filename}: alcance junto a cada figura`);
+    assert.ok(html.includes(FIGURE_SCOPE), `${filename}: capacidad actual y prevista`);
     for (const line of FACTORIES) for (const node of line.nodes) {
       assert.ok(html.includes(`data-station="${node.id}"`), `${filename}: ${node.id}`);
       assert.ok(html.includes(`aria-label="${node.name}: ${node.detail}"`), `${filename}: accesibilidad ${node.id}`);

@@ -27,10 +27,9 @@ function headingId(text: string) {
 }
 
 test("formatos y catálogo tienen punteros locales resolubles, incluidos los destinos compartidos", async () => {
-  const documents = ["README.md", "flujo-arquitectura.md", `${skill}/SKILL.md`,
-    ...formats.map(name => `${skill}/references/${name}.md`),
-    ".apm/skills/user-stories/SKILL.md", ".apm/skills/user-stories/references/drafting.md",
-    ".apm/skills/user-stories/references/reviewing.md"]
+  const documents = ["README.md", "flujo-arquitectura.md",
+    ...(await readdir(join(source, ".apm"), { recursive: true }))
+      .filter(name => name.endsWith(".md")).map(name => `.apm/${name}`)]
   const missing = new Set<string>()
   for (const file of documents) {
     for (const link of links(await read(file))) {
@@ -62,6 +61,11 @@ test("consumidores comparten las referencias y el catálogo cubre los intercambi
   assert.ok(links(stories).includes("../plantillas-entregables/references/historia.md"))
   assert.ok(links(router).includes("../user-stories/SKILL.md"))
   for (const path of common) assert.ok(links(router).some(link => link.endsWith(path.split("/references/")[1])))
+  for (const format of formats) {
+    const reference = await read(`${skill}/references/${format}.md`)
+    assert.ok(links(reference).some(link => link.split("#")[0] === "../../operativa-comun/references/publicacion-revision.md"),
+      `${format}: puntero directo a la norma de publicación/revisión e intentos`)
+  }
   const catalog = (await read("README.md")).split("## Catálogo de entregables")[1]
   const destinations = links(catalog)
   for (const format of formats) assert.ok(destinations.includes(`${skill}/references/${format}.md`), format)

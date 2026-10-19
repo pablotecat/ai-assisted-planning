@@ -2,7 +2,7 @@
 
 ## Aplicación y suficiencia
 
-Arquitecto Test redacta casos concretos y Revisor los contrasta con el encargo, la suite y el contrato de arquitectura. Todos los apartados son obligatorios; historias relacionadas y estimación son opcionales cuando no sean pertinentes. Para revisión y contadores usa [Revisión](revision.md#historial-compartido). La lectura de tests describe sus comprobaciones, no una ejecución satisfactoria; diseño, implementación y ejecución son estados distintos.
+Arquitecto Test redacta casos concretos y Revisor los contrasta con el encargo, la suite y el contrato de arquitectura. Todos los apartados son obligatorios; historias relacionadas y estimación son opcionales cuando no sean pertinentes. Antes de publicar, revisar o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md), incluida la norma de intentos de arquitectura; representa dictamen e historial con [Revisión](revision.md#historial-compartido). La lectura de tests describe sus comprobaciones, no una ejecución satisfactoria; diseño, implementación y ejecución son estados distintos.
 
 Clasifica cada caso como **reutilizar**, **actualizar** o **crear**, citando el caso existente o el alcance buscado y la justificación. En una actualización indica qué pasos/resultados cambian. El encaje distingue recursos existentes de propuestos; las convenciones observadas se identifican como tales. Fundamenta positivos, negativos y límites en criterios o reglas recibidos; un resultado funcional desconocido permanece pendiente con pregunta, no se rellena con una suposición.
 

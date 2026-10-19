@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
-import { FACTORIES } from "./model.mjs";
+import { FACTORIES, FIGURE_SCOPE } from "./model.mjs";
 import { planningDescription, stationLabelText } from "./geometry.mjs";
 
 const model = (await readFile(new URL("./model.mjs", import.meta.url), "utf8")).replace(/^export /gm, "");
@@ -13,6 +13,13 @@ for (const name of ["index.html", "index-light.html"]) {
   const previousModel = original.slice(original.indexOf("const EXAMPLE ="), original.indexOf("const FACTORY_CAMERAS="));
   const previous = runInNewContext(previousModel + ";FACTORIES");
   let html = original;
+  const scope = `<p class="section-summary" data-flow-scope><strong>ILUSTRATIVA.</strong> ${FIGURE_SCOPE}</p>`;
+  const scriptAt = html.indexOf('<script type="module">');
+  assert.ok(scriptAt > 0, `${name}: script boundary`);
+  let markup = html.slice(0, scriptAt).replace(/<p class="section-summary" data-flow-scope>[\s\S]*?<\/p>\s*/g, "");
+  assert.equal([...markup.matchAll(/<figure class="iso-figure">/g)].length, 2, `${name}: figures`);
+  markup = markup.replaceAll('<figure class="iso-figure">', `${scope}\n    <figure class="iso-figure">`);
+  html = markup + html.slice(scriptAt);
   for (let i = 0; i < FACTORIES.length; i++) {
     const line = FACTORIES[i];
     assert.equal(previous[i].nodes.length, line.nodes.length);

@@ -32,3 +32,5 @@ Los corchetes señalan opciones, no caracteres literales. Ejecuta consultas sin 
 3. Descubre el recorrido relevante con los comandos anteriores y valida cada archivo decisivo mediante lectura directa del workspace. Cita `ruta/archivo.ext:linea-inicial-linea-final` (`Simbolo`), con rangos estrechos y cada salto decisivo. Obtén las líneas por lectura si la herramienta no las ofrece. Cierra con evidencia verificable de cada afirmación material.
 
 Si falta la CLI, el workspace es ambiguo, el índice no se corresponde o una referencia necesaria no puede comprobarse, devuelve `INSUFICIENTE` e indica el dato o acción exactos requeridos. Conserva Codegraph como medio principal; no lo sustituyas silenciosamente. El código acredita implementación, no intención funcional; comentarios y tests son contexto secundario, y leer un test no demuestra su ejecución.
+
+Para redactar `investigacion.md` y comprobar su suficiencia, aplica [informe de código](references/informe.md). Termina con todos sus apartados y evidencia o límite por afirmación material.

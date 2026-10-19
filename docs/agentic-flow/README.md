@@ -2,6 +2,8 @@
 
 Abre **[index-light.html](index-light.html)** o [index.html](index.html) en el navegador. Ambas páginas son autónomas y permiten cambiar entre tema claro y oscuro.
 
+**Figura ILUSTRATIVA.** Hoy están disponibles investigación (Jira de solo lectura según rol, Codegraph en Lector Código y documentos en su lector), refinamiento desde Planificador y Arquitecto con Test UI, Revisor común y publicación versionada. Test lee directamente su proyecto en solo lectura. Backend, Frontend y proveedor son [evolución futura](../roadmap.md); los revisores por rama representan usos del rol común. Las cantidades y resultados de la maqueta no acreditan tareas reales. [Contrato vigente](../../flujo-arquitectura.md).
+
 ## Fase 1 · Ideas → Historias Refinadas
 
 El planificador lee varios documentos, conserva copias originales y los reparte a los refinadores. Estos hacen consultas concretas a investigadores, que recurren a Lector Código y Lector Documentación para buscar en **Fuente de Verdad**. Las respuestas vuelven a quien preguntó. Los refinadores deconstruyen y redactan las historias y las devuelven al planificador para su revisión conjunta. Un revisor coteja originales y propuesta antes de dejar la salida en **Historias Refinadas**.
@@ -10,7 +12,7 @@ Los dos puestos P son el mismo planificador: reparto y revisión del conjunto.
 
 ## Fase 2 · Historias Refinadas → Tareas
 
-El arquitecto principal toma las historias y las reparte a Test, Back y Front. Cada especialista lee, solicita fragmentos al proveedor —que accede a **Código**— y crea varias tareas. Cada rama tiene su propio revisor. Las tareas revisadas vuelven al arquitecto principal para su integración y entrega.
+En el recorrido **ilustrativo previsto**, el arquitecto principal reparte historias a Test, Back y Front. Cada especialista solicita fragmentos al proveedor —que accede a **Código**— y crea tareas. Cada rama representa una revisión antes de volver al arquitecto principal. Esta segunda cadena completa supera la capacidad implementada, que entrega casos UI revisados y encargos pendientes de otras especialidades.
 
 Los dos puestos A son el mismo arquitecto principal: reparto e integración. La pila Historias Refinadas enlaza ambas fases.
 
@@ -39,7 +41,7 @@ node build.mjs --audit
 
 Los HTML generados no requieren servidor, skill ni dependencias npm para abrirse.
 
-Para sincronizar nombres, etiquetas accesibles, pasos y modelo embebido manteniendo las piezas y rutas existentes, ejecuta `node sync-html.mjs`. Este sincronizador usa solo fuentes locales y verifica que las estaciones conservan su geometría. Cambios en geometría o estructura requieren el constructor completo anterior.
+Para sincronizar textos, aviso ILUSTRATIVA junto a cada figura, etiquetas accesibles, pasos y modelo embebido manteniendo piezas y rutas, ejecuta `node sync-html.mjs`. Usa solo fuentes locales y verifica la geometría de estaciones y rutas. Para este cambio documental basta ese sincronizador; el constructor externo solo es necesario para reconstruir geometría o estructura.
 
 ## Verificación
 

@@ -1,5 +1,7 @@
 # Acceso Jira: verificación de la corrección
 
+> **Evidencia histórica del 17 de octubre de 2026.** Contrato cotejado entonces; no sustituye las fuentes vigentes del paquete ni las [comprobaciones posteriores](agent-instructions-verification.md). La aceptación remota pendiente de abajo conserva su alcance original.
+
 Fecha: 2026-10-17. Entorno: Windows, Node.js 24.18.0, OpenCode 1.19.3 y APM 0.32.0.
 
 El contrato siguiente utiliza los nombres actuales. Los resultados fechados de esta página son evidencia histórica del 17 de octubre; la nueva comprobación del renombrado y la migración está en [names-migration-verification.md](names-migration-verification.md).
@@ -9,7 +11,7 @@ El contrato siguiente utiliza los nombres actuales. Los resultados fechados de e
 - Alias MCP admitidos: `jira` y `atlassian`, con las mismas excepciones de lectura. Las reglas amplias de denegación preceden a las excepciones. Lector Código y Arquitecto Test conservan su contrato sin acceso Jira; Revisor conserva su alcance sin `atlassianUserInfo`.
 - Planificador, Investigador, Arquitecto y Lector Documentación atienden primero las consultas puntuales compatibles con su rol. «Solo el título» lee `fields: ["summary"]` y devuelve su valor literal. El flujo completo mantiene originales, delegación, publicación y revisión según su contrato.
 - APM distribuye `.apm/agents/` y los scripts del paquete. El instalador verifica los alias sobre la configuración efectiva, incluidos los ajustes globales JSONC. El plugin de sesión no necesita modificar prefijos MCP.
-- Las copias externas `agents-old/` y `old/`, que contienen la antigua prohibición de acceso Jira del rol de investigación, son históricas y no forman parte de este paquete.
+- La autoridad de agentes aplicada es la distribución local `.apm/agents/`; los prompts sustituidos no forman parte del contrato operativo.
 
 ## Comprobaciones ejecutadas
 
