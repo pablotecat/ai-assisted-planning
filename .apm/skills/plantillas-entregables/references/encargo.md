@@ -4,7 +4,7 @@
 
 Arquitecto prepara un paquete por historia y especialidad, ejecutable o pendiente de capacidad. Todos los apartados de la plantilla son obligatorios. La rama «Contexto Test» se incluye solo para Test; referencia solicitada y conocimiento pueden estar pendientes o no aplicar con motivo. Relaciones entre áreas solo transmiten el contrato o dato pertinente, no código ajeno. El resultado requerido distingue bloques a descomponer Backend/Frontend de casos UI concretos Test.
 
-Conserva ID y `task_id` disponibles en continuaciones. Antes de delegar, publicar, revisar o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md#intentos--solo-flujo-de-arquitectura), fuente normativa de límite, cómputo, historial y fallos. Representa sus datos con [Revisión](revision.md#historial-compartido); el contrato mantiene alcance y estados.
+Conserva ID y `sessionID` disponibles en continuaciones. Antes de delegar, publicar, revisar o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md#intentos--solo-flujo-de-arquitectura), fuente normativa de límite, cómputo, historial y fallos. Representa sus datos con [Revisión](revision.md#historial-compartido); el contrato mantiene alcance y estados.
 
 **Cierre:** el receptor puede identificar qué analizar, qué fuentes y criterios usar, qué devolver y si tiene margen de revisión. Cada dato indispensable ausente tiene efecto y pregunta; la falta de especialista mantiene el paquete pendiente, sin fingir análisis realizado.
 
@@ -15,7 +15,7 @@ Conserva ID y `task_id` disponibles en continuaciones. Antes de delegar, publica
 
 **Especialidad y productor esperado:** <especialidad; agente disponible o capacidad pendiente>
 **Historia padre:** <una sola ID>
-**Estado y continuidad:** <estado; task_id si disponible o No disponible>
+**Estado y continuidad:** <estado; sessionID si disponible o No disponible>
 
 ## Fuentes, versiones y fragmentos pertinentes
 - <Ruta/fuente oficial y versión identificada; revisión previa si existe>
@@ -59,7 +59,7 @@ Rutas, citas y acuerdos inventados; no acreditan un proyecto real.
 
 **Especialidad y productor esperado:** Test; arquitecto-test.
 **Historia padre:** LOCAL-H1-A.
-**Estado y continuidad:** pendiente; task_id aún no disponible.
+**Estado y continuidad:** pendiente; sessionID aún no disponible.
 
 ## Fuentes, versiones y fragmentos pertinentes
 - historias.md v2 §LOCAL-H1-A; revisión declarada por usuario, sin informe aportado.

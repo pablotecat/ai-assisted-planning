@@ -1,7 +1,10 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 
-export default (async () => ({
-  "shell.env": async (_input, output) => {
-    output.env.PYTHONIOENCODING = "utf-8"
+export default Plugin.define({
+  id: "ai-assisted-planning.markitdown-utf8",
+  async setup(ctx) {
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.PYTHONIOENCODING = "utf-8"
+    })
   },
-})) satisfies Plugin
+})

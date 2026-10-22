@@ -1,6 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "subagent_depth": 4,
+  "experimental": {
+    "subagent_depth": 4
+  },
   "mcp": {
     "servers": {
       "jira": {

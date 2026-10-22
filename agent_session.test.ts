@@ -4,67 +4,110 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 import plugin from "./plugin/agent-session.ts"
+import utf8 from "./plugin/markitdown-utf8.ts"
 import { publishSession, type Identity } from "./tools/session_store.ts"
 
-test("adaptador OpenCode usa identidades de sesión y bloquea otras escrituras", async () => {
-  const client = {
+async function adapter(nodes: Record<string, Identity>) {
+  const hooks: Record<string, (event: any) => Promise<void>> = {}
+  const tools: Record<string, any> = {}
+  const permissions: any[] = []
+  const investigator = { permissions: [] as any[] }
+  await plugin.setup({
+    agent: { transform: async (fn: any) => fn({ update: (_id: string, update: any) => update(investigator) }) },
     session: {
-      get: async () => ({ data: { id: "s", title: "Consulta", time: { created: Date.now() }, directory: "proyecto" } }),
-      messages: async () => ({ data: [{ info: { role: "assistant", mode: "investigador" } }] }),
-      message: async () => ({ data: { info: { role: "assistant", mode: "investigador" } } }),
+      get: async ({ sessionID }: any) => {
+        const node = nodes[sessionID]
+        if (!node) throw new Error("Sesión desconocida")
+        return { ...node, time: { created: node.created }, location: { directory: node.directory } }
+      },
+      context: async ({ sessionID }: any) => [
+        { id: "mensaje", type: "assistant", agent: nodes[sessionID].agent },
+        { id: "compactacion", type: "compaction", summary: "otro-agente" },
+      ],
+      hook: async (name: string, fn: any) => { hooks[name] = fn },
     },
+    permission: { assert: async (input: any) => { permissions.push(input) },
+      hook: async (name: string, fn: any) => { hooks[`permission.${name}`] = fn } },
+    tool: { transform: async (fn: any) => fn({ add: (tool: any) => { tools[tool.name] = tool } }),
+      hook: async (name: string, fn: any) => { hooks[name] = fn } },
+  } as never)
+  return {
+    investigator,
+    tools, permissions,
+    evaluate: (event: any) => hooks["permission.evaluate"](event),
+    context: (sessionID: string) => hooks.context({ sessionID, agent: nodes[sessionID].agent }),
+    before: (sessionID: string, tool: string, input = {}) => hooks["execute.before"]({
+      sessionID, tool, input, agent: nodes[sessionID].agent, messageID: "mensaje", id: "call",
+    }),
   }
-  const hooks = await plugin({ client, directory: "proyecto" } as never)
-  const before = hooks["tool.execute.before"]!
-  await assert.rejects(before({ tool: "write", sessionID: "s", callID: "a" }, { args: {} }), /restringida/)
-  await assert.rejects(before({ tool: "bash", sessionID: "s", callID: "b" }, { args: { command: "echo hola > archivo" } }), /no permitido/)
-  await before({ tool: "write_report_pair", sessionID: "s", callID: "c" }, { args: {} })
+}
+
+const base = { title: "Consulta", created: 1, directory: "proyecto" }
+
+test("las diez herramientas se registran en V2 y validan permisos e inputs", async () => {
+  const { tools, permissions } = await adapter({})
+  assert.equal(Object.keys(tools).length, 10)
+  const context = { sessionID: "s", messageID: "mensaje", id: "call", agent: "planificador" }
+  const result = await tools.planning_settings.execute({}, context)
+  assert.equal(typeof JSON.parse(result.content).MAX_REFINADORES_PARALELOS, "number")
+  assert.deepEqual(permissions[0], { sessionID: "s", agent: "planificador",
+    source: { type: "tool", messageID: "mensaje", id: "call" },
+    action: "planning_settings", resources: ["*"], save: ["*"] })
+  await assert.rejects(tools.planning_settings.execute({ proyectoJira: " " }, context))
+  await assert.rejects(tools.planning_settings.execute({}, { ...context, agent: "build" }), /Solo planificador/)
+})
+
+test("la política dinámica de delegación no se relaja por transformaciones de configuración posteriores", async () => {
+  const { evaluate } = await adapter({})
+  for (const [agent, action, resources, expected] of [
+    ["investigador", "subagent", ["general"], "deny"],
+    ["investigador", "subagent", ["revisor"], "allow"],
+    ["investigador", "subagent", ["revisor", "general"], "deny"],
+    ["build", "subagent", ["general"], "allow"],
+    ["investigador", "read", ["general"], "allow"],
+  ]) {
+    const event = { agent, action, resources, effect: "allow" }
+    await evaluate(event)
+    assert.equal(event.effect, expected)
+  }
+})
+
+test("adaptador V2 verifica la autoría del mensaje, publica y bloquea escrituras alternativas", async () => {
+  const nodes = { s: { ...base, id: "s", agent: "investigador" } }
+  const { before, investigator } = await adapter(nodes)
+  assert.equal(plugin.id, "ai-assisted-planning.agent-session")
+  assert.ok(investigator.permissions.some(rule => rule.action === "subagent" && rule.resource === "revisor" && rule.effect === "allow"))
+  for (const tool of ["write", "edit", "patch"])
+    await assert.rejects(before("s", tool), /restringida/)
+  await assert.rejects(before("s", "shell", { command: "echo hola > archivo" }), /no permitido/)
+  await before("s", "write_report_pair")
   const dir = await mkdtemp(join(tmpdir(), "planning-adapter-"))
   try {
-    const data = await publishSession({ sessionID: "s", messageID: "mensaje", agent: "investigador", topic: "duda",
-      files: { "resumen.md": "ok" } }, { root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json") })
+    const input = { sessionID: "s", messageID: "mensaje", agent: "investigador", topic: "duda", files: { "resumen.md": "ok" } }
+    const options = { root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json") }
+    const data = await publishSession(input, options)
     assert.equal(data.guardado, true)
     if (data.guardado) assert.equal(await readFile(data.rutas["resumen.md"], "utf8"), "ok")
-    await assert.rejects(publishSession({ sessionID: "s", messageID: "mensaje", agent: "lector-codigo", topic: "duda",
-      files: { "resumen.md": "no" } }, { root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json") }), /Autor/)
+    await assert.rejects(publishSession({ ...input, agent: "lector-codigo" }, options), /Autor/)
+    await assert.rejects(publishSession({ ...input, messageID: "compactacion" }, options), /atribuible/)
+    await assert.rejects(publishSession({ ...input, messageID: "inexistente" }, options), /atribuible/)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
-test("Planificador y Arquitecto no invocan Lector Documentación, tampoco al reanudar una sesión", async () => {
-  const base = { title: "Consulta", created: Date.now(), directory: "proyecto" }
-  const nodes: Record<string, Identity> = {
-    plan: { ...base, id: "plan", agent: "planificador" },
-    architect: { ...base, id: "architect", agent: "arquitecto" },
-    "plan-docs": { ...base, id: "plan-docs", parentID: "plan", agent: "lector-documentacion" },
-    "architect-docs": { ...base, id: "architect-docs", parentID: "architect", agent: "lector-documentacion" },
-  }
-  const client = {
-    session: {
-      get: async ({ path }: { path: { id: string } }) => {
-        const node = nodes[path.id]
-        return { data: { ...node, time: { created: node.created } } }
-      },
-      messages: async ({ path }: { path: { id: string } }) => ({ data: [
-        { info: { role: "assistant", agent: nodes[path.id].agent } },
-      ] }),
-    },
-  }
-  const hooks = await plugin({ client, directory: "proyecto" } as never)
-  const before = hooks["tool.execute.before"]!
-  for (const sessionID of ["plan", "architect"]) {
-    await assert.rejects(before({ tool: "task", sessionID, callID: "delegate" },
-      { args: { subagent_type: "lector-documentacion" } }), /no pueden delegar/)
-    await assert.rejects(before({ tool: "task", sessionID, callID: "resume" },
-      { args: { subagent_type: "revisor", task_id: `${sessionID}-docs` } }), /no pueden delegar/)
-    await before({ tool: "task", sessionID, callID: "review" }, { args: { subagent_type: "revisor" } })
-    for (const tool of ["atlassian_searchJiraIssuesUsingJql", "atlassian_getJiraIssue", "atlassian_fetch",
-      "jira_searchJiraIssuesUsingJql", "jira_getJiraIssue", "jira_fetch"])
-      await before({ tool, sessionID, callID: tool }, { args: {} })
+test("V2 no permite eludir las delegaciones al reanudar una sesión", async () => {
+  const nodes: Record<string, Identity> = {}
+  for (const agent of ["planificador", "arquitecto", "investigador", "lector-documentacion", "revisor"])
+    nodes[agent] = { ...base, id: agent, agent }
+  const { before } = await adapter(nodes)
+  for (const agent of ["planificador", "arquitecto"]) {
+    await assert.rejects(before(agent, "subagent", { agent: "lector-documentacion" }), /no pueden delegar/)
+    await assert.rejects(before(agent, "subagent", { agent: "revisor", sessionID: "lector-documentacion" }), /no pueden delegar/)
+    await before(agent, "subagent", { agent: "revisor" })
+    for (const alias of ["jira", "atlassian"]) await before(agent, `${alias}_getJiraIssue`)
   }
 })
 
-test("Test solo trabaja por encargo del arquitecto, también al reanudar sesiones", async () => {
-  const base = { title: "Tests UI", created: Date.now(), directory: "proyecto" }
+test("Test solo trabaja por encargo del arquitecto del mismo proyecto", async () => {
   const nodes: Record<string, Identity> = {
     architect: { ...base, id: "architect", agent: "arquitecto" },
     test: { ...base, id: "test", parentID: "architect", agent: "arquitecto-test" },
@@ -72,67 +115,51 @@ test("Test solo trabaja por encargo del arquitecto, también al reanudar sesione
     direct: { ...base, id: "direct", agent: "arquitecto-test" },
     build: { ...base, id: "build", agent: "build" },
     wrongParent: { ...base, id: "wrongParent", parentID: "build", agent: "arquitecto-test" },
-    foreign: { ...base, id: "foreign", parentID: "architect", agent: "arquitecto-test", directory: "otro-proyecto" },
-    investigator: { ...base, id: "investigator", agent: "investigador" },
+    foreign: { ...base, id: "foreign", parentID: "architect", agent: "arquitecto-test", directory: "otro" },
   }
-  const client = {
-    session: {
-      get: async ({ path }: { path: { id: string } }) => {
-        const node = nodes[path.id]
-        return { data: { ...node, time: { created: node.created } } }
-      },
-      messages: async ({ path }: { path: { id: string } }) => ({ data: [
-        { info: { role: "assistant", mode: "build", agent: nodes[path.id].agent } },
-        { info: { role: "assistant", agent: "otro-agente", summary: true } },
-      ] }),
-    },
+  const { context, before } = await adapter(nodes)
+  await context("test")
+  for (const id of ["direct", "wrongParent", "foreign"]) {
+    await assert.rejects(context(id), /requiere delegación/)
+    await assert.rejects(before(id, "read", { path: "tests/caso.ts" }), /requiere delegación/)
   }
-  const hooks = await plugin({ client, directory: "proyecto" } as never)
-  const params = hooks["chat.params"]!
-  const before = hooks["tool.execute.before"]!
-   await params({ sessionID: "test", agent: "arquitecto-test" } as never, {} as never)
-  for (const sessionID of ["direct", "wrongParent", "foreign"]) {
-    await assert.rejects(params({ sessionID, agent: "arquitecto-test" } as never, {} as never), /requiere delegación/)
-    await assert.rejects(before({ tool: "read", sessionID, callID: "read" }, { args: { filePath: "tests/caso.ts" } }), /requiere delegación/)
-  }
-  await before({ tool: "task", sessionID: "architect", callID: "delegate" }, { args: { subagent_type: "arquitecto-test" } })
-  await before({ tool: "task", sessionID: "architect", callID: "resume" }, { args: { subagent_type: "arquitecto-test", task_id: "test" } })
-  await assert.rejects(before({ tool: "task", sessionID: "build", callID: "delegate" }, { args: { subagent_type: "arquitecto-test" } }), /Solo arquitecto/)
-  await assert.rejects(before({ tool: "task", sessionID: "build", callID: "resume" }, { args: { subagent_type: "general", task_id: "test" } }), /Solo arquitecto/)
-  await before({ tool: "task", sessionID: "test", callID: "review" }, { args: { subagent_type: "revisor" } })
-  await before({ tool: "task", sessionID: "test", callID: "resume-review" }, { args: { subagent_type: "revisor", task_id: "review" } })
-  await before({ tool: "task", sessionID: "investigator", callID: "review" }, { args: { subagent_type: "revisor" } })
-  await assert.rejects(before({ tool: "task", sessionID: "test", callID: "other" }, { args: { subagent_type: "lector-codigo" } }), /solo delega/)
-  await before({ tool: "read", sessionID: "test", callID: "read" }, { args: { filePath: "tests/caso.ts" } })
-  await before({ tool: "bash", sessionID: "test", callID: "metadata" }, { args: { command: "git status --short --branch" } })
-  for (const command of ["npm test", "git checkout main", "git status; npm test"]) {
-    await assert.rejects(before({ tool: "bash", sessionID: "test", callID: "shell" }, { args: { command } }), /no permitido/)
-  }
-  await assert.rejects(before({ tool: "apply_patch", sessionID: "test", callID: "edit" }, { args: {} }), /restringida/)
+  await before("architect", "subagent", { agent: "arquitecto-test" })
+  await before("architect", "subagent", { agent: "arquitecto-test", sessionID: "test" })
+  await assert.rejects(before("build", "subagent", { agent: "arquitecto-test" }), /Solo arquitecto/)
+  await assert.rejects(before("build", "subagent", { agent: "general", sessionID: "test" }), /Solo arquitecto/)
+  await before("test", "subagent", { agent: "revisor" })
+  await before("test", "subagent", { agent: "revisor", sessionID: "review" })
+  await assert.rejects(before("test", "subagent", { agent: "lector-codigo" }), /solo delega/)
 })
 
-test("los ocho nombres están sujetos al plugin y los agentes ajenos conservan su comportamiento", async () => {
-  let agent = "investigador"
-  const client = { session: {
-    get: async ({ path }: { path: { id: string } }) => ({ data: { id: path.id,
-      parentID: path.id === "s" ? "parent" : undefined, directory: "proyecto", time: { created: 1 } } }),
-    messages: async ({ path }: { path: { id: string } }) => ({ data: [
-      { info: { role: "assistant", mode: "build", agent: path.id === "parent" ? "arquitecto" : agent } },
-    ] }),
-  } }
-  const before = (await plugin({ client, directory: "proyecto" } as never))["tool.execute.before"]!
-  for (agent of ["investigador", "lector-codigo", "lector-documentacion", "planificador", "refinador", "arquitecto", "arquitecto-test", "revisor"]) {
-    for (const tool of ["edit", "write", "apply_patch"])
-      await assert.rejects(before({ tool, sessionID: "s", callID: tool }, { args: {} }), /restringida/, agent)
-    await assert.rejects(before({ tool: "bash", sessionID: "s", callID: "shell" }, { args: { command: "npm test" } }), /no permitido/, agent)
+test("los ocho agentes conservan sus límites de edición y shell; no se restringen agentes ajenos", async () => {
+  const nodes: Record<string, Identity> = { parent: { ...base, id: "parent", agent: "arquitecto" } }
+  const own = ["investigador", "lector-codigo", "lector-documentacion", "planificador", "refinador", "arquitecto", "arquitecto-test", "revisor"]
+  const others = ["build", "general", "agente-personalizado", "investigador-extra"]
+  for (const agent of [...own, ...others]) nodes[agent] = { ...base, id: agent, agent,
+    parentID: agent === "arquitecto-test" ? "parent" : undefined }
+  const { before } = await adapter(nodes)
+  for (const agent of own) {
+    for (const tool of ["edit", "write", "patch"]) await assert.rejects(before(agent, tool), /restringida/)
+    await assert.rejects(before(agent, "shell", { command: "npm test" }), /no permitido/)
+    await assert.rejects(before(agent, "shell"), /no permitido/)
   }
-  for (agent of ["build", "general", "agente-personalizado", "investigador-extra"]) {
-    await before({ tool: "write", sessionID: "s", callID: "write" }, { args: {} })
-    await before({ tool: "bash", sessionID: "s", callID: "shell" }, { args: { command: "npm test" } })
+  for (const agent of others) {
+    await before(agent, "write")
+    await before(agent, "shell", { command: "npm test" })
   }
-  for (const [name, command] of [["lector-codigo", "codegraph status proyecto --json"], ["lector-documentacion", 'markitdown "documento.pdf"'], ["arquitecto-test", "git status --short"]]) {
-    agent = name
-    await before({ tool: "bash", sessionID: "s", callID: "shell" }, { args: { command } })
-    await assert.rejects(before({ tool: "bash", sessionID: "s", callID: "shell" }, { args: { command: command + "; npm test" } }), /no permitido/)
+  for (const [agent, command] of [["lector-codigo", "codegraph status proyecto --json"],
+    ["lector-documentacion", 'markitdown "documento.pdf"'], ["arquitecto-test", "git status --short"]]) {
+    await before(agent, "shell", { command })
+    await assert.rejects(before(agent, "shell", { command: command + "; npm test" }), /no permitido/)
   }
+})
+
+test("MarkItDown configura UTF-8 mediante el hook de shell V2", async () => {
+  const event = { env: { EXISTING: "ok" } as Record<string, string> }
+  await utf8.setup({ shell: { hook: async (name: string, fn: any) => {
+    assert.equal(name, "create.before")
+    fn(event)
+  } } } as never)
+  assert.deepEqual(event.env, { EXISTING: "ok", PYTHONIOENCODING: "utf-8" })
 })

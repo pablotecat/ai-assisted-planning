@@ -3,7 +3,9 @@ import { spawnSync } from "node:child_process"
 import { access, cp, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { dirname, join, relative, resolve, toNamespacedPath } from "node:path"
 import { fileURLToPath } from "node:url"
+import { tmpdir } from "node:os"
 import test from "node:test"
+import { probe, probePlugin, withServer } from "./test-support/opencode.mjs"
 
 const source = fileURLToPath(new URL(".", import.meta.url))
 const skill = ".apm/skills/plantillas-entregables"
@@ -94,7 +96,7 @@ test("plan integrado mantiene seis apartados y delega formatos sin perder contin
   assert.match(publication, /solicitud enviada consume un intento/)
   assert.match(publication, /Reapertura, aprobación parcial y cambio material conservan el contador/)
   assert.match(contract, /Backend, Frontend y el proveedor siguen pendientes/)
-  assert.match(contract, /handoff[\s\S]*task_id[\s\S]*respuesta/)
+  assert.match(contract, /handoff[\s\S]*sessionID[\s\S]*respuesta/)
 })
 
 function isolated(root: string) {
@@ -111,7 +113,7 @@ function isolated(root: string) {
 }
 
 test("APM distribuye plantillas y OpenCode las carga y lee desde cada consumidor real", { timeout: 240_000 }, async (t) => {
-  const parent = join(source, "build")
+  const parent = join(tmpdir(), "opencode")
   await access(source)
   await mkdir(parent, { recursive: true })
   const root = await mkdtemp(join(parent, "t"))
@@ -139,7 +141,7 @@ test("APM distribuye plantillas y OpenCode las carga y lee desde cada consumidor
     const installedSkill = dirname(join(host, deployed))
     // External auto-discovery is disabled for isolation; explicitly allow only
     // the skill directory just deployed in this local consumer.
-    env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ skills: { paths: [dirname(installedSkill)] } })
+    env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ skills: [dirname(installedSkill)], plugins: [probePlugin] })
     for (const name of ["SKILL.md", ...formats.map(name => `references/${name}.md`)]) {
       const text = await readFile(join(installedSkill, name), "utf8")
       // APM rewrites existing cross-skill links to its installed source package.
@@ -150,18 +152,21 @@ test("APM distribuye plantillas y OpenCode las carga y lee desde cada consumidor
       }
     }
     t.diagnostic(`APM: ${deployed}; plantillas, ejemplos y referencias conservados tras reescritura de enlaces`)
+    await withServer(host, env, async connected => {
     for (const [agent, expected] of Object.entries(consumers)) {
-      const loaded = JSON.parse(run("opencode", ["debug", "agent", agent]))
-      assert.equal(loaded.tools.skill, true, `${agent}: skill habilitada`)
-      assert.equal(loaded.tools.read, true, `${agent}: read habilitado`)
-      const invoked = run("opencode", ["debug", "agent", agent, "--tool", "skill", "--params", "{name:'plantillas-entregables'}"])
+      const loaded = probe(host, connected, { agent, checks: [{ action: "skill", resource: "plantillas-entregables" }, { action: "read", resource: "*" }],
+        tool: "skill", args: { id: "plantillas-entregables" } })
+      assert.equal(loaded.decisions["skill:plantillas-entregables"], "allow", `${agent}: skill habilitada`)
+      assert.equal(loaded.decisions["read:*"], "allow", `${agent}: read habilitado`)
+      const invoked = JSON.stringify(loaded.result)
       assert.ok(invoked.includes("Plantillas de entregables"), `${agent}: carga efectiva de la skill`)
       for (const format of expected) {
         const path = relative(host, join(installedSkill, "references", `${format}.md`)).replaceAll("\\", "/")
-        const reference = run("opencode", ["debug", "agent", agent, "--tool", "read", "--params", `{filePath:'${path}'}`])
+        const reference = JSON.stringify(probe(host, connected, { agent, tool: "read", args: { path } }).result)
         assert.ok(reference.includes("Plantilla copiable"), `${agent}: lectura efectiva de ${format}`)
       }
     }
+    })
     t.diagnostic("Cinco consumidores: skill invocada; 13 lecturas reales cubren las cinco referencias; sin llamadas LLM ni Jira")
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
 })

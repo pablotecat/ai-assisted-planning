@@ -19,14 +19,14 @@ Agentes para investigar código y documentación local, refinar historias desde 
 
 ## Instalación en OpenCode
 
-Necesitas [OpenCode](https://opencode.ai/docs/), [APM](https://microsoft.github.io/apm/getting-started/installation/), [Node.js 24 o posterior](https://nodejs.org/en/download) y [Git](https://git-scm.com/downloads) (APM lo utiliza para descargar paquetes). Abre una terminal en la **carpeta raíz del proyecto** donde usarás los agentes, no en `.opencode/`, y ejecuta estos dos comandos:
+Necesitas [OpenCode V2](https://opencode.ai/v2/docs/) (validado con 2.1.2), [APM](https://microsoft.github.io/apm/getting-started/installation/), [Node.js 24 o posterior](https://nodejs.org/en/download) y [Git](https://git-scm.com/downloads) (APM lo utiliza para descargar paquetes). Abre una terminal en la **carpeta raíz del proyecto** donde usarás los agentes, no en `.opencode/`, y ejecuta estos dos comandos:
 
 ```sh
 apm install pablotecat/ai-assisted-planning --target opencode
 node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
 ```
 
-APM instala los agentes en `.opencode/agents/` y las skills con sus referencias en `.agents/skills/`. El segundo comando registra esa carpeta en `skills.paths` conservando las rutas previas y configura plugins, herramientas, contrato de arquitectura y dependencias npm para OpenCode; no necesitas descargar este repositorio. Después abre o reinicia OpenCode en esa misma carpeta y llama a `planificador` o `arquitecto` según el flujo.
+APM instala los agentes en `.opencode/agents/` y las skills con sus referencias en `.agents/skills/`. El segundo comando registra esa carpeta en el array `skills` conservando las rutas y URLs previas y configura plugins, herramientas, contrato de arquitectura y dependencias npm para OpenCode; no necesitas descargar este repositorio. Conserva comentarios y ajustes ajenos en JSONC. Después abre o reinicia OpenCode en esa misma carpeta y llama a `planificador` o `arquitecto` según el flujo.
 
 **Actualizar:** desde la misma carpeta, ejecuta:
 
@@ -36,6 +36,10 @@ node apm_modules/pablotecat/ai-assisted-planning/scripts/setup-opencode.mjs
 ```
 
 Tus ajustes se conservan en `.opencode/agent-settings.json`. Puedes dejar ese archivo como está: el agente pedirá la clave del proyecto Jira o las rutas de código y documentos cuando las necesite.
+
+### Actualizar desde OpenCode V1
+
+Repite los dos comandos de actualización anteriores en cada proyecto consumidor. El instalador sitúa la profundidad de delegación en `experimental.subagent_depth` (mínimo 4) y actualiza los plugins a la API V2 de `@opencode/plugin`. El plugin registra explícitamente las diez herramientas y comprueba sus permisos e inputs; reutiliza sus implementaciones y el helper de esquemas `@opencode-ai/plugin`. El frontmatter de permisos V1 sigue admitido y OpenCode lo normaliza. Las instrucciones usan `subagent` y su `sessionID` para continuar encargos. No vuelvas a cargar estos plugins con V1. Consulta la [guía de migración](https://opencode.ai/v2/docs/migrate-v1).
 
 ### Migración de nombres
 
@@ -53,7 +57,7 @@ Para consultas de código, instala Codegraph e indexa el proyecto. Para converti
 
 ### Conexión Jira y alias MCP
 
-Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/supported-tools/) en [OpenCode](https://opencode.ai/docs/mcp-servers/) con **`jira` o `atlassian`**. Ambos alias están admitidos; basta uno. Por ejemplo, combina este bloque con tu `opencode.json` existente:
+Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/supported-tools/) en [OpenCode](https://opencode.ai/v2/docs/mcp-servers/) con **`jira` o `atlassian`**. Ambos alias están admitidos; basta uno. Por ejemplo, combina este bloque con tu `opencode.json` existente:
 
 ```json
 {
@@ -70,7 +74,7 @@ Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo
 }
 ```
 
-Ejecuta `opencode mcp auth jira` (o `opencode mcp auth atlassian`) y `opencode mcp list`: el servidor debe aparecer conectado. Conserva una conexión existente funcional con cualquiera de los dos alias. La autenticación y el sitio se resuelven en OpenCode; `agent-settings.json` guarda la clave del proyecto, no las credenciales ni el `cloudId`.
+Ejecuta `opencode mcp list`; si falta autenticación, abre `/mcps` en OpenCode, selecciona el servidor e inicia sesión. El servidor debe aparecer conectado. Conserva una conexión existente funcional con cualquiera de los dos alias. La autenticación y el sitio se resuelven en OpenCode; `agent-settings.json` guarda la clave del proyecto, no las credenciales ni el `cloudId`.
 
 OpenCode forma los nombres `<alias>_<herramienta>`. Los permisos efectivos de cada rol están en `.apm/agents/`; la norma de consulta, catálogo, sitio, ARI y campos está en [consulta-jira](.apm/skills/consulta-jira/SKILL.md). Las regresiones contrastan ambos alias con el motor real de OpenCode.
 
@@ -134,7 +138,7 @@ Para ejecutar las comprobaciones: `node --test *.test.ts` (Node.js 24 o posterio
 | Investigación documental `investigacion.md` | [Lector Documentación — investigación completa](.apm/agents/lector-documentacion.agent.md), [fuentes y evidencias](.apm/skills/operativa-comun/references/fuentes-evidencias.md) | Investigador, Revisor y solicitante reciben respuesta, hallazgos citados e incertidumbres con suficiencia. La recuperación íntegra de originales conserva el literal separado del análisis. No se extrae otra plantilla sin duplicación demostrada. |
 | `conclusion.md`, `resumen-ejecutivo.md` e `informe-detallado.md` | [Investigador](.apm/agents/investigador.agent.md), [write_report_pair](tools/write_report_pair.ts) | Refinador o solicitante: conclusión delegada o pareja de informes en consulta directa. El resumen responde; el informe conserva evidencias y límites. Son ramas distintas, no una obligación de producir tres archivos por consulta. |
 | `plan-implementacion.md` | [Contrato — entrega integrada](flujo-arquitectura.md#entrega-integrada-plan-implementacionmd), bloques según Tarea/Caso de Test | Arquitecto integra para usuario/equipo los seis apartados contractuales; mantiene cobertura parcial, pendientes de capacidad y bloqueos. Su estructura global permanece en el contrato, no se añade una sexta plantilla. |
-| Handoff | [Contrato — fase y continuación](flujo-arquitectura.md#fase-vigente-y-continuación), [historial de Revisión](.apm/skills/plantillas-entregables/references/revision.md#historial-compartido) | Arquitecto, Test y siguiente sesión preservan versión, decisiones, encargos/`task_id`, intentos, bloqueos y siguiente acción. Se entrega en la respuesta; no exige archivo nuevo. |
+| Handoff | [Contrato — fase y continuación](flujo-arquitectura.md#fase-vigente-y-continuación), [historial de Revisión](.apm/skills/plantillas-entregables/references/revision.md#historial-compartido) | Arquitecto, Test y siguiente sesión preservan versión, decisiones, encargos/`sessionID`, intentos, bloqueos y siguiente acción. Se entrega en la respuesta; no exige archivo nuevo. |
 | `indice.md` | [session_store](tools/session_store.ts) | Salida automática determinista de navegación de sesión, fuentes, decisiones y entregas. La herramienta conserva el formato; los agentes no redactan ni duplican su receta. |
 | Glosario (`Glosario.md` por defecto) | [domain-glossary — formato de salida](.apm/skills/domain-glossary/SKILL.md) | Solicitante: términos, definiciones, variantes documentales y menciones. Plantilla especializada junto a su productor por sus invariantes de orden, ausencia de tablas y trazabilidad. |
 | `profile.md`, `prep.md`, `sources.md`, `outcome.md`, `state.md` | [meeting-coach — router](.apm/skills/meeting-coach/SKILL.md), [artefactos y autoridad](.apm/skills/meeting-coach/references/artefactos.md) | Solicitante y futuras reuniones: perfil opcional, preparación, fuentes, feedback y estado vigente. Formatos y lifecycle privado co-localizados; preparación, cierre y consentimientos se leen según operación. |
@@ -145,4 +149,4 @@ Las [evidencias de plantillas](docs/deliverable-templates-verification.md) regis
 
 La [verificación de instrucciones](docs/agent-instructions-verification.md) registra la revisión de los ocho agentes, ocho skills y referencias, sus recorridos y las pruebas ejecutadas. Los informes anteriores conservan su alcance temporal; las previsiones están únicamente en [roadmap](docs/roadmap.md).
 
-Las regresiones Jira verifican permisos con la CLI real de OpenCode y distribución con APM en consumidores temporales; requieren ambas CLI en `PATH`. Consulta el [alcance de las pruebas y la validación funcional pendiente con Jira](docs/jira-access-verification.md).
+Las regresiones verifican permisos con la API y el motor real de OpenCode V2 en servidores privados con base de datos en memoria y MCP desactivado, sin llamadas LLM ni Jira, y distribución con APM en consumidores temporales; requieren ambas CLI en `PATH`. Los informes anteriores conservan su alcance temporal: una regresión local no sustituye la validación funcional de una conexión Jira autenticada.
