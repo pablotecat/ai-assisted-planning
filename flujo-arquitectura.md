@@ -60,7 +60,7 @@ El revisor comprueba cobertura, fundamento de resultados esperados, pertinencia 
 1. **Resumen y alcance:** historias recibidas, versión/fuentes, capacidades disponibles y estado global preparatorio, parcial o completo.
 2. **Matriz de cobertura:** historia, criterio y referencia, especialidad, encargo o bloque, estado y motivo. Registra todos los criterios, incluidos los pendientes, y las historias bloqueadas por falta de criterios.
 3. **Borradores listos para copiar:** por historia padre, los bloques aprobados e independientes según [Tarea](.apm/skills/plantillas-entregables/references/tarea.md) y los tests según [Caso de Test](.apm/skills/plantillas-entregables/references/caso-test.md). Esas plantillas conservan identidad local frente a clave real, vínculos con criterios, evidencia, dependencias, estimación pertinente y revisión exacta con sus intentos. No se incorporan como listos los paquetes pendientes de capacidad.
-4. **Encargos pendientes:** paquetes preparados por especialidad cuando todavía no se puede ejecutar el análisis o falta una capacidad. No se presentan como borradores técnicos aprobados. Conserva los identificadores, `task_id` disponibles, versiones analizadas e intentos consumidos de cada encargo, incluidos los ya ejecutados, para poder continuar.
+4. **Encargos pendientes:** paquetes preparados por especialidad cuando todavía no se puede ejecutar el análisis o falta una capacidad. No se presentan como borradores técnicos aprobados. Conserva los identificadores, `sessionID` disponibles, versiones analizadas e intentos consumidos de cada encargo, incluidos los ya ejecutados, para poder continuar.
 5. **Bloqueos y cuestiones:** identificador, historias/criterios/bloques afectados, fuente y evidencia, intentos consumidos cuando proceda, impacto, pregunta concreta y acción requerida. Incluye las contradicciones y dudas reunidas por todos los especialistas.
 6. **Decisiones y dependencias globales:** propietario de trabajo compartido, relaciones entre historias, decisiones técnicas sustentadas y respuestas confirmadas del usuario.
 
@@ -72,6 +72,6 @@ La entrega integrada actual contiene casos de Test revisados y encargos pendient
 
 Las comprobaciones del paquete verifican configuración, procedencia, publicación y revisión; la calidad del diseño del especialista requiere validación con historias y proyecto reales, descrita en el roadmap del paquete.
 
-Al cerrar cada sesión, incluye en la respuesta un handoff con versión vigente, decisiones, encargos y `task_id` disponibles, intentos consumidos, bloqueos y siguiente acción. Aplica la continuidad de la norma compartida de publicación y revisión.
+Al cerrar cada sesión, incluye en la respuesta un handoff con versión vigente, decisiones, encargos y `sessionID` disponibles, intentos consumidos, bloqueos y siguiente acción. Aplica la continuidad de la norma compartida de publicación y revisión.
 
-Para continuar, el handoff referencia las entregas e informes exactos y el [historial compartido por encargo](.apm/skills/plantillas-entregables/references/revision.md#historial-compartido), incluidos los `task_id` disponibles. Puede permanecer en la respuesta; no requiere un archivo adicional.
+Para continuar, el handoff referencia las entregas e informes exactos y el [historial compartido por encargo](.apm/skills/plantillas-entregables/references/revision.md#historial-compartido), incluidos los `sessionID` disponibles. Puede permanecer en la respuesta; no requiere un archivo adicional.

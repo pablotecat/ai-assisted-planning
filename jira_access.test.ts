@@ -5,7 +5,9 @@ import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import test from "node:test"
+import { parse } from "jsonc-parser"
 import { jiraAliasStatus } from "./scripts/jira-aliases.mjs"
+import { api, opencode, probe, probePlugin, withServer } from "./test-support/opencode.mjs"
 
 const source = fileURLToPath(new URL(".", import.meta.url))
 const jiraAgents = ["planificador", "investigador", "arquitecto", "refinador", "lector-documentacion", "revisor"]
@@ -37,6 +39,7 @@ const names = ["jira", "atlassian"].flatMap((alias) =>
   [...reads, ...writes, "atlassianUserInfo"].map((name) => `${alias}_${name}`))
 
 function cli(command: string, args: string[], cwd = source, env = process.env) {
+  if (command === "opencode") return opencode(args, cwd, env)
   return spawnSync(process.platform === "win32" ? "cmd.exe" : command,
     process.platform === "win32" ? ["/d", "/s", "/c", command, ...args] : args,
     { cwd, env, encoding: "utf8", timeout: 120_000, maxBuffer: 4 * 1024 * 1024 })
@@ -84,6 +87,7 @@ test("instalación reconoce ambos alias, configuraciones globales resueltas y Ji
     assert.match(jiraAliasStatus({ mcp: { servers: { [alias]: server } } }), new RegExp(`configurados: ${alias}`))
   }
   assert.match(jiraAliasStatus({}), /Jira pendiente/)
+  assert.match(jiraAliasStatus([{ type: "document", info: { mcp: { servers: { jira: { type: "remote", url: "https://mcp.atlassian.com/v2/mcp" } } } } }]), /configurados: jira/)
   assert.match(jiraAliasStatus({ mcp: { jira: { enabled: false } } }), /Jira pendiente/)
   assert.match(jiraAliasStatus({ mcp: { servers: { jira: { disabled: true } } } }), /Jira pendiente/)
   assert.throws(() => jiraAliasStatus({ mcp: { otro: { url: "https://mcp.atlassian.com/v2/mcp" } } }), /sin permisos/)
@@ -169,24 +173,28 @@ test("actualización APM retira identidades antiguas, migra antes del plugin y c
     assert.deepEqual(migrated.agentes.investigador.especialistasPermitidos, ["lector-documentacion"])
     assert.equal(migrated.agentes["lector-codigo"].guardarEntregablesEnSesion, false)
     assert.ok(!(await readdir(join(configDir, "tools"))).includes("coordinator_defaults.ts"))
-    const effective = JSON.parse(run("opencode", ["debug", "config"]))
-    assert.deepEqual(effective.agent.investigador.permission.task,
-      { "*": "deny", "lector-codigo": "deny", "lector-documentacion": "allow", revisor: "allow" })
-    const probe = join(host, "session-probe.mjs")
-    await writeFile(probe, `import assert from "node:assert/strict";
+    await withServer(host, { ...env, OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugins: [probePlugin] }) }, connected => {
+      const { decisions } = probe(host, connected, { agent: "investigador", checks:
+        ["lector-codigo", "lector-documentacion", "revisor", "general"].map(resource => ({ action: "subagent", resource })) })
+      assert.deepEqual(decisions, { "subagent:lector-codigo": "deny", "subagent:lector-documentacion": "allow",
+        "subagent:revisor": "allow", "subagent:general": "deny" })
+    }, ["planning-test", "ai-assisted-planning.agent-session", "ai-assisted-planning.markitdown-utf8"])
+    const sessionProbe = join(host, "session-probe.mjs")
+    await writeFile(sessionProbe, `import assert from "node:assert/strict";
       import plugin from "./.opencode/plugin/agent-session.ts";
       const agents = {s:"investigador", docs:"lector-documentacion", code:"lector-codigo"};
-      const client = {session:{get:async({path})=>({data:{id:path.id,directory:"project",time:{created:1}}}),
-        messages:async({path})=>({data:[{info:{role:"assistant",mode:"build",agent:agents[path.id]}}]})}};
-      const before = (await plugin({client,directory:"project"}))["tool.execute.before"];
-      const call = args => before({tool:"task",sessionID:"s",callID:"probe"},{args});
-      await assert.rejects(call({subagent_type:"lector-codigo"}),/deshabilitado/);
-      await call({subagent_type:"lector-documentacion"});
-      await call({subagent_type:"revisor"});
-      await call({subagent_type:"lector-codigo",task_id:"docs"});
-      await assert.rejects(call({subagent_type:"lector-documentacion",task_id:"code"}),/deshabilitado/);
+      let before;
+      await plugin.setup({agent:{transform:async()=>{}},permission:{hook:async()=>{}},
+        session:{get:async({sessionID})=>({id:sessionID,agent:agents[sessionID],location:{directory:"project"},time:{created:1}}),hook:async()=>{}},
+        tool:{transform:async()=>{},hook:async(_,fn)=>{before=fn;}}});
+      const call = input => before({tool:"subagent",sessionID:"s",agent:"investigador",input});
+      await assert.rejects(call({agent:"lector-codigo"}),/deshabilitado/);
+      await call({agent:"lector-documentacion"});
+      await call({agent:"revisor"});
+      await call({agent:"lector-codigo",sessionID:"docs"});
+      await assert.rejects(call({agent:"lector-documentacion",sessionID:"code"}),/deshabilitado/);
       console.log("Identidad real conservada al reanudar");`)
-    assert.match(run("node", [probe]), /Identidad real conservada/)
+    assert.match(run("node", [sessionProbe]), /Identidad real conservada/)
     run("node", [setup])
     assert.equal(await readFile(settingsPath, "utf8"), saved)
     assert.equal(await readFile(historical, "utf8"), history)
@@ -200,7 +208,7 @@ test("actualización APM retira identidades antiguas, migra antes del plugin y c
     assert.equal(await readFile(custom, "utf8"), previous)
     assert.match(collision.stdout + collision.stderr, /collision|colisi|conflict|skip|custom|local/i)
     t.diagnostic(`APM colisión: ${collision.status}; se conserva investigador.md personalizado`)
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
 })
 
 test("contrato documental: consulta puntual anterior al arranque y refinamiento completo conservado", async () => {
@@ -263,12 +271,7 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
   await mkdir(parent, { recursive: true })
   const root = await mkdtemp(join(parent, "jira-permissions-"))
   const configDir = join(root, ".opencode")
-  const env = { ...isolated(root), XDG_CONFIG_HOME: join(root, "config"),
-    OPENCODE_CONFIG_DIR: join(root, "config", "opencode"), OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
-    OPENCODE_DISABLE_EXTERNAL_SKILLS: "1", OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
-    OPENCODE_CONFIG: "", OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: "fixture/read-only",
-      provider: { fixture: { npm: "@ai-sdk/openai-compatible", models: { "read-only": { name: "Permission fixture" } },
-        options: { baseURL: "http://127.0.0.1:1/v1", apiKey: "fixture" } } } }) }
+  const env = { ...isolated(root), OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugins: [probePlugin] }) }
   try {
     await mkdir(join(configDir, "agents"), { recursive: true })
     await mkdir(join(configDir, "tools"), { recursive: true })
@@ -276,20 +279,6 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
       await cp(join(source, ".apm", "agents", `${name}.agent.md`), join(configDir, "agents", `${name}.md`))
     const skillsDir = join(root, ".agents", "skills")
     await cp(join(source, ".apm", "skills"), skillsDir, { recursive: true })
-    // These definitions never contact a server or perform a write. debug agent uses
-    // OpenCode's Permission.disabled and its context.ask uses Permission.evaluate.
-    const probe = `export default { description: "Read-only permission probe", args: {},
-      async execute(_, context) {
-        const result = {};
-        for (const permission of ${JSON.stringify(names)}) {
-          try { await context.ask({ permission, patterns: ["*"], always: [], metadata: {} }); result[permission] = "allow"; }
-          catch { result[permission] = "deny"; }
-        }
-        return JSON.stringify(result);
-      } };`
-    for (const name of names)
-      await writeFile(join(configDir, "tools", `${name}.ts`), "export default { description: 'No-op fixture', args: {}, async execute() { return 'fixture'; } }")
-    await writeFile(join(configDir, "tools", "jira_getPermissionProbe.ts"), probe)
     const absolutePaths = references.map(ref => join(skillsDir, "operativa-comun", "references", ref))
     // ReadTool asks with a path relative to the worktree; direct context.ask
     // probes with only absolute paths miss denials in real model sessions.
@@ -299,56 +288,33 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
       join(skillsDir, "operativa-comun", "references", "extra.md"),
       join(root, "other", "operativa-comun", "references", "fuentes-evidencias.md")]
     const forbiddenPaths = [...forbiddenAbsolutePaths, ...forbiddenAbsolutePaths.map(path => relative(root, path))]
-    const sharedProbe = `export default {
-      description: "Local permission probe, no publication", args: {}, async execute(_, context) {
-        const result = { skill: {}, read: {}, task: {} };
-        for (const name of ${JSON.stringify(researchTargets)}) {
-          try { await context.ask({permission:"task",patterns:[name],always:[],metadata:{}}); result.task[name] = "allow"; }
-          catch { result.task[name] = "deny"; }
-        }
-        for (const name of ${JSON.stringify([...sharedSkills, "plantillas-entregables", "user-stories", "domain-glossary", "meeting-coach", "unknown-skill"])}) {
-          try { await context.ask({permission:"skill",patterns:[name],always:[],metadata:{}}); result.skill[name] = "allow"; }
-          catch { result.skill[name] = "deny"; }
-        }
-        for (const path of ${JSON.stringify([...paths, ...forbiddenPaths])}) {
-          try { await context.ask({permission:"read",patterns:[path],always:[],metadata:{}}); result.read[path] = "allow"; }
-          catch { result.read[path] = "deny"; }
-        }
-        return JSON.stringify(result);
-      } };`
-    for (const name of ["publish_agent_deliverable", "write_planning_originals", "write_review_documents"])
-      await writeFile(join(configDir, "tools", `${name}.ts`), sharedProbe)
+    const checks = [...names.map(action => ({ action, resource: "*" })),
+      ...researchTargets.map(resource => ({ action: "subagent", resource })),
+      ...[...sharedSkills, "plantillas-entregables", "user-stories", "domain-glossary", "meeting-coach", "unknown-skill"]
+        .map(resource => ({ action: "skill", resource })),
+      ...[...paths, ...forbiddenPaths].map(resource => ({ action: "read", resource })),
+      { action: "execute", resource: "*" }]
+    await withServer(root, env, async connected => {
     for (const agent of [...jiraAgents, "lector-codigo", "arquitecto-test"]) {
-      const loaded = cli("opencode", ["debug", "agent", agent], root, env)
-      assert.equal(loaded.status, 0, loaded.stderr || loaded.stdout)
-      const { tools } = JSON.parse(loaded.stdout)
+      const { decisions } = probe(root, connected, { agent, checks })
+      assert.equal(decisions["execute:*"], jiraAgents.includes(agent) ? "allow" : "deny", agent)
       for (const alias of ["jira", "atlassian"]) {
         for (const name of [...reads, ...writes, "atlassianUserInfo"]) {
           const expected = jiraAgents.includes(agent) && (reads.includes(name) || name === "atlassianUserInfo" && agent !== "revisor")
-          assert.equal(tools[`${alias}_${name}`], expected, `${agent}: ${alias}_${name}`)
+          assert.equal(decisions[`${alias}_${name}:*`], expected ? "allow" : "deny", `${agent}: ${alias}_${name}`)
         }
       }
-      {
-        const tool = agent === "planificador" ? "write_planning_originals" : agent === "revisor" ? "write_review_documents" : "publish_agent_deliverable"
-        const checked = cli("opencode", ["debug", "agent", agent, "--tool", tool], root, env)
-        assert.equal(checked.status, 0, checked.stderr || checked.stdout)
-        const decisions = JSON.parse(JSON.parse(checked.stdout).result.output)
-        if (researchChain[agent]) {
-          for (const target of researchTargets)
-            assert.equal(decisions.task[target], researchChain[agent][target] ?? "deny", `${agent}: task ${target}`)
-        }
-        for (const [name, decision] of Object.entries(decisions.skill))
-          assert.equal(decision, skillAccess[agent].includes(name) ? "allow" : "deny", `${agent}: skill ${name}`)
-        for (const [path, decision] of Object.entries(decisions.read))
-          assert.equal(decision, agent !== "investigador" || paths.includes(path) ? "allow" : "deny", `${agent}: read ${path}`)
+      if (researchChain[agent]) {
+        for (const target of researchTargets)
+          assert.equal(decisions[`subagent:${target}`], researchChain[agent][target] ?? "deny", `${agent}: subagent ${target}`)
       }
-      if (!jiraAgents.includes(agent)) continue
-      const checked = cli("opencode", ["debug", "agent", agent, "--tool", "jira_getPermissionProbe"], root, env)
-      assert.equal(checked.status, 0, checked.stderr || checked.stdout)
-      const decisions = JSON.parse(JSON.parse(checked.stdout).result.output)
-      for (const name of names) assert.equal(decisions[name], tools[name] ? "allow" : "deny", `${agent}: ask ${name}`)
+      for (const { action, resource } of checks.filter(check => check.action === "skill"))
+        assert.equal(decisions[`${action}:${resource}`], skillAccess[agent].includes(resource) ? "allow" : "deny", `${agent}: skill ${resource}`)
+      for (const path of [...paths, ...forbiddenPaths])
+        assert.equal(decisions[`read:${path}`], agent !== "investigador" || paths.includes(path) ? "allow" : "deny", `${agent}: read ${path}`)
     }
-  } finally { await rm(root, { recursive: true, force: true }) }
+    })
+  } finally { await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
 })
 
 test("distribución APM e instalación idempotente conservan permisos y ajustes del consumidor", {
@@ -408,41 +374,50 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
     assert.ok(!contract.includes("](.apm/skills/"), "El contrato instalado debe enlazar las skills del consumidor")
     for (const [, target] of contract.matchAll(/\]\(([^)#]+\.md)(?:#[^)]*)?\)/g))
       assert.ok((await readFile(resolve(host, ".opencode", target), "utf8")).length, `Contrato instalado -> ${target}`)
-    const loadedSkills = JSON.parse(run("opencode", ["debug", "skill"], host))
+    const { loadedSkills, agents } = await withServer(host, env, connected => ({
+      loadedSkills: api("get", "/api/skill", host, connected).data,
+      agents: api("get", "/api/agent", host, connected).data,
+    }), ["ai-assisted-planning.agent-session", "ai-assisted-planning.markitdown-utf8"])
     for (const name of [...sharedSkills, "plantillas-entregables", "domain-glossary", "meeting-coach", "user-stories"])
-      assert.equal(loadedSkills.find(skill => skill.name === name)?.location, join(host, ".agents", "skills", name, "SKILL.md"))
-    const effective = JSON.parse(run("opencode", ["debug", "config"], host))
-    assert.ok(effective.skills.paths.includes(join(host, ".agents", "skills")))
-    assert.ok(effective.subagent_depth >= 4, "La cadena anidada conserva profundidad para el lector")
-    assert.equal(effective.agent.investigador.mode, "all")
-    assert.equal(effective.agent.refinador.mode, "subagent")
-    assert.deepEqual(effective.agent.investigador.permission.read, { "*": "deny",
-      ...Object.fromEntries(references.flatMap(ref => [
-        [`.agents/skills/operativa-comun/references/${ref}`, "allow"],
-        [`*/.agents/skills/operativa-comun/references/${ref}`, "allow"],
-      ])) }, "Solo las tres referencias operativas, tanto relativas como con prefijo")
+      assert.equal(loadedSkills.find(skill => skill.id === name)?.path, join(host, ".agents", "skills", name, "SKILL.md"))
+    const effective = api("get", "/api/config", host, env)
+    const installedConfig = effective.find(entry => entry.path === join(host, ".opencode", "opencode.json")).info
+    assert.ok(installedConfig.skills.includes(join(host, ".agents", "skills")))
+    assert.ok(installedConfig.experimental.subagent_depth >= 4, "La cadena anidada conserva profundidad para el lector")
+    assert.equal(agents.find(agent => agent.id === "investigador").mode, "all")
+    assert.equal(agents.find(agent => agent.id === "refinador").mode, "subagent")
+    assert.deepEqual(agents.find(agent => agent.id === "investigador").permissions.filter(rule => rule.action === "read").slice(-7),
+      [{ action: "read", resource: "*", effect: "deny" }, ...references.flatMap(ref => [
+        { action: "read", resource: `.agents/skills/operativa-comun/references/${ref}`, effect: "allow" },
+      ]), ...references.map(ref => ({ action: "read", resource: `*/.agents/skills/operativa-comun/references/${ref}`, effect: "allow" }))],
+      "Solo las tres referencias operativas, tanto relativas como con prefijo")
     for (const [agent, permissions] of Object.entries(researchChain))
-      assert.deepEqual(effective.agent[agent].permission.task, permissions, `${agent}: cadena instalada sin atajos`)
+      assert.deepEqual(Object.fromEntries(agents.find(item => item.id === agent).permissions
+        .filter(rule => rule.action === "subagent").map(rule => [rule.resource, rule.effect])), permissions, `${agent}: cadena instalada sin atajos`)
     const configPath = join(host, ".opencode", "opencode.json")
     const config = JSON.parse(await readFile(configPath, "utf8"))
     const customSkills = join(host, "custom-skills")
     await mkdir(customSkills)
-    config.skills.paths.push(customSkills)
+    config.skills.push(customSkills)
+    config.plugins = [probePlugin]
     await writeFile(configPath, JSON.stringify(config))
-    const toolEnv = { ...env, OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: "fixture/read-only",
-      provider: { fixture: { npm: "@ai-sdk/openai-compatible", models: { "read-only": { name: "Permission fixture" } },
-        options: { baseURL: "http://127.0.0.1:1/v1", apiKey: "fixture" } } } }) }
+    await withServer(host, env, async toolEnv => {
+    const planning = probe(host, toolEnv, { agent: "planificador", tool: "planning_settings", args: {} })
+    assert.ok(JSON.stringify(planning.result).includes("PROYECTO_JIRA"), "Herramientas de archivo V1 compatibles en V2")
+    for (const tool of ["agent_settings", "investigator_defaults", "architecture_settings", "refinement_settings",
+      "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair", "write_review_documents"])
+      assert.ok(planning.tools.includes(tool), `Herramienta instalada: ${tool}`)
     for (const name of ["consulta-jira", "operativa-comun"]) {
-      const result = cli("opencode", ["debug", "agent", "investigador", "--tool", "skill", "--params", JSON.stringify({ name })], host, toolEnv)
-      assert.equal(result.status, 0, result.stderr || result.stdout)
-      assert.ok(JSON.parse(result.stdout).result.output.includes(`# ${name === "consulta-jira" ? "Consulta Jira" : "Operativa común"}`))
+      const result = probe(host, toolEnv, { agent: "investigador", tool: "skill", args: { id: name } })
+      assert.ok(JSON.stringify(result.result).includes(`# ${name === "consulta-jira" ? "Consulta Jira" : "Operativa común"}`))
     }
     for (const ref of references) {
-      const result = cli("opencode", ["debug", "agent", "investigador", "--tool", "read", "--params",
-        JSON.stringify({ filePath: join(host, ".agents", "skills", "operativa-comun", "references", ref) })], host, toolEnv)
-      assert.equal(result.status, 0, result.stderr || result.stdout)
-      assert.ok(JSON.parse(result.stdout).result.output.includes("</"), ref)
+      const result = probe(host, toolEnv, { agent: "investigador", tool: "read",
+        args: { path: join(host, ".agents", "skills", "operativa-comun", "references", ref) } })
+      const title = (await readFile(join(host, ".agents", "skills", "operativa-comun", "references", ref), "utf8")).split(/\r?\n/)[0]
+      assert.ok(JSON.stringify(result.result).includes(title), ref)
     }
+    })
     const settingsPath = join(host, ".opencode", "agent-settings.json")
     const settings = JSON.parse(await readFile(settingsPath, "utf8"))
     settings.proyecto.claveProyectoJira = "CONSUMIDOR"
@@ -457,13 +432,25 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
       // Synthetic local endpoint: checks global JSONC alias resolution, without authenticating against Jira.
       "mcp": { "jira": { "type": "remote", "url": "http://127.0.0.1:1/mcp", "enabled": true } }
     }`)
+    const jsoncPath = join(host, ".opencode", "opencode.jsonc")
+    config.subagent_depth = 9
+    config.experimental.subagent_depth = 6
+    config.skills = { paths: config.skills }
+    config.watcher = { ignore: ["private/**"] }
+    await writeFile(jsoncPath, "// Configuración del consumidor: conservar comentario\n" + JSON.stringify(config, null, 2))
     const updated = run("node", [setup], host)
     assert.match(updated, /configurados: jira/)
     assert.match(updated, /Cierra y reinicia OpenCode/)
     await checkAgents()
     await checkPointers(join(host, ".agents", "skills"))
-    assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")).skills.paths,
+    assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")).skills,
       [join(host, ".agents", "skills"), customSkills])
+    const migratedText = await readFile(jsoncPath, "utf8"), migratedConfig = parse(migratedText)
+    assert.match(migratedText, /conservar comentario/)
+    assert.deepEqual(migratedConfig.skills, [join(host, ".agents", "skills"), customSkills])
+    assert.equal(migratedConfig.experimental.subagent_depth, 6, "El valor nativo V2 tiene precedencia y se conserva")
+    assert.ok(!Object.hasOwn(migratedConfig, "subagent_depth"))
+    assert.deepEqual(migratedConfig.watcher, { ignore: ["private/**"] })
     assert.equal(await readFile(settingsPath, "utf8"), saved)
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
 })

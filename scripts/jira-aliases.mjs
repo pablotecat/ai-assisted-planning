@@ -1,5 +1,11 @@
 // OpenCode prefixes MCP tools with the configured server alias.
 export function jiraAliasStatus(config) {
+  // V2 returns ordered configuration sources, not one merged V1 document.
+  if (Array.isArray(config)) {
+    const servers = {}
+    for (const entry of config) Object.assign(servers, entry.info?.mcp?.servers ?? {})
+    config = { mcp: { servers } }
+  }
   const aliases = ["jira", "atlassian"]
   const servers = Object.entries(config.mcp?.servers ?? config.mcp ?? {})
     .filter(([, server]) => server.enabled !== false && server.disabled !== true)

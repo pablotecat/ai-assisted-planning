@@ -42,7 +42,7 @@ Todos los apartados son obligatorios. Intento, límite e historial se incluyen c
 Encargo, borrador, plan integrado y handoff referencian este registro por encargo. Representa los datos exigidos por [Intentos — solo flujo de arquitectura](../../operativa-comun/references/publicacion-revision.md#intentos--solo-flujo-de-arquitectura), incluida la siguiente solicitud cuando esté preparada; esa norma decide el consumo y la continuidad. El registro es documental, no un contador automático de la herramienta.
 
 ```markdown
-**Encargo:** <ENC-ID; task_id disponibles del especialista/revisor>
+**Encargo:** <ENC-ID; sessionID disponibles del especialista/revisor>
 **Límite:** <MAX_INTENTOS_REVISION>
 **Intentos consumidos:** <número verificado o Desconocido: bloqueo de continuidad>
 
