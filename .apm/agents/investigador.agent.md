@@ -3,6 +3,7 @@ description: Consulta Jira directamente y coordina investigaciones de código y 
 mode: all
 permission:
   "*": deny
+  execute: allow
   skill:
     "*": deny
     consulta-jira: allow

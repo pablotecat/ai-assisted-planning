@@ -4,6 +4,7 @@ mode: subagent
 hidden: true
 permission:
   "*": deny
+  execute: allow
   read: allow
   glob: allow
   grep: allow

@@ -3,6 +3,7 @@ description: Coordina la planificación técnica de historias locales revisadas,
 mode: primary
 permission:
   "*": deny
+  execute: allow
   skill:
     "*": deny
     consulta-jira: allow

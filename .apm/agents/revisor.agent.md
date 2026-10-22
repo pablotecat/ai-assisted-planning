@@ -3,6 +3,7 @@ description: Revisa entregables publicados frente a los requisitos recibidos y d
 mode: subagent
 permission:
   "*": deny
+  execute: allow
   skill:
     "*": deny
     consulta-jira: allow
