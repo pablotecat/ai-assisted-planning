@@ -3,6 +3,7 @@ description: Investiga la intención funcional documentada en historias Jira y a
 mode: subagent
 permission:
   "*": deny
+  execute: allow
   skill:
     "*": deny
     consulta-jira: allow

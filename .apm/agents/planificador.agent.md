@@ -3,6 +3,7 @@ description: Resuelve consultas puntuales de historias Jira y, en encargos de re
 mode: primary
 permission:
   "*": deny
+  execute: allow
   read: allow
   glob: allow
   grep: allow

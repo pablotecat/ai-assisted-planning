@@ -59,10 +59,12 @@ Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "jira": {
-      "type": "remote",
-      "url": "https://mcp.atlassian.com/v2/mcp",
-      "enabled": true
+    "servers": {
+      "jira": {
+        "type": "remote",
+        "url": "https://mcp.atlassian.com/v2/mcp",
+        "disabled": false
+      }
     }
   }
 }
@@ -71,6 +73,8 @@ Conecta y autentica [Atlassian MCP](https://support.atlassian.com/atlassian-rovo
 Ejecuta `opencode mcp auth jira` (o `opencode mcp auth atlassian`) y `opencode mcp list`: el servidor debe aparecer conectado. Conserva una conexión existente funcional con cualquiera de los dos alias. La autenticación y el sitio se resuelven en OpenCode; `agent-settings.json` guarda la clave del proyecto, no las credenciales ni el `cloudId`.
 
 OpenCode forma los nombres `<alias>_<herramienta>`. Los permisos efectivos de cada rol están en `.apm/agents/`; la norma de consulta, catálogo, sitio, ARI y campos está en [consulta-jira](.apm/skills/consulta-jira/SKILL.md). Las regresiones contrastan ambos alias con el motor real de OpenCode.
+
+**OpenCode V2 publica las herramientas MCP a través de Code Mode**: solo son alcanzables desde la herramienta `execute`, bajo el namespace del alias (`tools.jira.*`, `tools.atlassian.*`). Los agentes que declaran permisos de consulta Jira (Investigador, Lector Documentación, Planificador, Refinador, Arquitecto y Revisor) incluyen por ello `execute: allow` tras su denegación general; sus reglas `jira_*`/`atlassian_*` se siguen aplicando a cada llamada anidada, de modo que las lecturas permitidas funcionan y las escrituras (`executeWrite`, `executeDestructive`, creaciones, ediciones, borrados) quedan rechazadas por el motor (`Unknown tool`). Sin `execute: allow`, un agente con `"*": deny` no recibe catálogo MCP alguno, aunque declare permisos `jira_*`. Lector Código y Arquitecto Test no consultan Jira y no reciben `execute`. En una sesión nueva el catálogo puede llegar vacío unos segundos hasta completar la conexión: reintenta en lugar de concluir que no hay acceso.
 
 En los agentes, las denegaciones amplias preceden a las excepciones: OpenCode aplica la **última regla coincidente**. Conserva ese orden al personalizar permisos. La documentación del servidor no demuestra qué catálogo publica una conexión concreta.
 
