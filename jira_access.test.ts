@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { dirname, join, resolve } from "node:path"
+import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import test from "node:test"
 import { jiraAliasStatus } from "./scripts/jira-aliases.mjs"
@@ -21,6 +21,12 @@ const skillAccess: Record<string, string[]> = {
   revisor: ["consulta-jira", "operativa-comun", "plantillas-entregables", "user-stories"],
 }
 const references = ["fuentes-evidencias.md", "configuracion.md", "publicacion-revision.md"]
+const researchChain: Record<string, Record<string, string>> = {
+  planificador: { "*": "deny", refinador: "allow", revisor: "allow" },
+  refinador: { "*": "deny", investigador: "allow", revisor: "allow" },
+  investigador: { "*": "deny", "lector-codigo": "allow", "lector-documentacion": "allow", revisor: "allow" },
+}
+const researchTargets = ["refinador", "investigador", "lector-codigo", "lector-documentacion", "revisor", "general"]
 const reads = ["getAccessibleAtlassianResources", "getJiraIssue", "getJiraProjectIssueTypesMetadata",
   "listJiraIssueComments", "listJiraIssueTransitions", "listJiraIssueWorklogs", "lookupJiraAccountId",
   "search", "searchJiraIssuesUsingJql", "fetch", "discover", "executeRead"]
@@ -284,14 +290,22 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
     for (const name of names)
       await writeFile(join(configDir, "tools", `${name}.ts`), "export default { description: 'No-op fixture', args: {}, async execute() { return 'fixture'; } }")
     await writeFile(join(configDir, "tools", "jira_getPermissionProbe.ts"), probe)
-    const paths = references.map(ref => join(skillsDir, "operativa-comun", "references", ref))
-    const forbiddenPaths = [join(root, "src", "private.ts"), join(configDir, "agent-settings.json"),
+    const absolutePaths = references.map(ref => join(skillsDir, "operativa-comun", "references", ref))
+    // ReadTool asks with a path relative to the worktree; direct context.ask
+    // probes with only absolute paths miss denials in real model sessions.
+    const paths = [...absolutePaths, ...absolutePaths.map(path => relative(root, path))]
+    const forbiddenAbsolutePaths = [join(root, "src", "private.ts"), join(configDir, "agent-settings.json"),
       join(skillsDir, "user-stories", "references", "principles.md"),
       join(skillsDir, "operativa-comun", "references", "extra.md"),
       join(root, "other", "operativa-comun", "references", "fuentes-evidencias.md")]
+    const forbiddenPaths = [...forbiddenAbsolutePaths, ...forbiddenAbsolutePaths.map(path => relative(root, path))]
     const sharedProbe = `export default {
       description: "Local permission probe, no publication", args: {}, async execute(_, context) {
-        const result = { skill: {}, read: {} };
+        const result = { skill: {}, read: {}, task: {} };
+        for (const name of ${JSON.stringify(researchTargets)}) {
+          try { await context.ask({permission:"task",patterns:[name],always:[],metadata:{}}); result.task[name] = "allow"; }
+          catch { result.task[name] = "deny"; }
+        }
         for (const name of ${JSON.stringify([...sharedSkills, "plantillas-entregables", "user-stories", "domain-glossary", "meeting-coach", "unknown-skill"])}) {
           try { await context.ask({permission:"skill",patterns:[name],always:[],metadata:{}}); result.skill[name] = "allow"; }
           catch { result.skill[name] = "deny"; }
@@ -319,6 +333,10 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
         const checked = cli("opencode", ["debug", "agent", agent, "--tool", tool], root, env)
         assert.equal(checked.status, 0, checked.stderr || checked.stdout)
         const decisions = JSON.parse(JSON.parse(checked.stdout).result.output)
+        if (researchChain[agent]) {
+          for (const target of researchTargets)
+            assert.equal(decisions.task[target], researchChain[agent][target] ?? "deny", `${agent}: task ${target}`)
+        }
         for (const [name, decision] of Object.entries(decisions.skill))
           assert.equal(decision, skillAccess[agent].includes(name) ? "allow" : "deny", `${agent}: skill ${name}`)
         for (const [path, decision] of Object.entries(decisions.read))
@@ -395,6 +413,16 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
       assert.equal(loadedSkills.find(skill => skill.name === name)?.location, join(host, ".agents", "skills", name, "SKILL.md"))
     const effective = JSON.parse(run("opencode", ["debug", "config"], host))
     assert.ok(effective.skills.paths.includes(join(host, ".agents", "skills")))
+    assert.ok(effective.subagent_depth >= 4, "La cadena anidada conserva profundidad para el lector")
+    assert.equal(effective.agent.investigador.mode, "all")
+    assert.equal(effective.agent.refinador.mode, "subagent")
+    assert.deepEqual(effective.agent.investigador.permission.read, { "*": "deny",
+      ...Object.fromEntries(references.flatMap(ref => [
+        [`.agents/skills/operativa-comun/references/${ref}`, "allow"],
+        [`*/.agents/skills/operativa-comun/references/${ref}`, "allow"],
+      ])) }, "Solo las tres referencias operativas, tanto relativas como con prefijo")
+    for (const [agent, permissions] of Object.entries(researchChain))
+      assert.deepEqual(effective.agent[agent].permission.task, permissions, `${agent}: cadena instalada sin atajos`)
     const configPath = join(host, ".opencode", "opencode.json")
     const config = JSON.parse(await readFile(configPath, "utf8"))
     const customSkills = join(host, "custom-skills")
