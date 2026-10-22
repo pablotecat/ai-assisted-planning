@@ -9,6 +9,9 @@ permission:
     operativa-comun: allow
   read:
     "*": deny
+    ".agents/skills/operativa-comun/references/fuentes-evidencias.md": allow
+    ".agents/skills/operativa-comun/references/configuracion.md": allow
+    ".agents/skills/operativa-comun/references/publicacion-revision.md": allow
     "*/.agents/skills/operativa-comun/references/fuentes-evidencias.md": allow
     "*/.agents/skills/operativa-comun/references/configuracion.md": allow
     "*/.agents/skills/operativa-comun/references/publicacion-revision.md": allow
