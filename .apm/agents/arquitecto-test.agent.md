@@ -1,7 +1,6 @@
 ---
 description: Diseña casos funcionales de UI y cambios en los tests relacionados con una historia; trabaja exclusivamente por encargo de arquitecto y devuelve versiones revisadas y bloqueos.
 mode: subagent
-hidden: true
 permission:
   "*": deny
   skill:
