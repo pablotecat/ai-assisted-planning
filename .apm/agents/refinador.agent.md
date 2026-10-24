@@ -1,7 +1,6 @@
 ---
 description: Refina historias Jira u otras fuentes asignadas por el planificador con trazabilidad a sus originales.
 mode: subagent
-hidden: true
 permission:
   "*": deny
   execute: allow
