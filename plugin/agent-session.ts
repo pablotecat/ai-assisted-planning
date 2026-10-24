@@ -10,7 +10,7 @@ import writePlanningOriginals from "../tools/write_planning_originals.ts"
 import writePlanningDeliverables from "../tools/write_planning_deliverables.ts"
 import writeReportPair from "../tools/write_report_pair.ts"
 import writeReviewDocuments from "../tools/write_review_documents.ts"
-import { setSessionResolver } from "../tools/session_store.ts"
+import { makeIdentity } from "../tools/identity.ts"
 
 const packageAgents = new Set(["investigador", "lector-codigo", "lector-documentacion", "planificador",
   "refinador", "arquitecto", "arquitecto-test", "revisor"])
@@ -18,21 +18,7 @@ const packageAgents = new Set(["investigador", "lector-codigo", "lector-document
 export default Plugin.define({
   id: "ai-assisted-planning.agent-session",
   async setup(ctx) {
-    async function identity(id: string, messageID?: string) {
-      const session = await ctx.session.get({ sessionID: id })
-      if (session.id !== id) throw new Error("Sesión OpenCode no verificable")
-      let agent = session.agent
-      if (messageID) {
-        const messages = await ctx.session.context({ sessionID: id })
-        const message = messages.find((message) => message.id === messageID)
-        if (!message || message.type !== "assistant") throw new Error("No hay mensaje de agente atribuible")
-        agent = message.agent
-      }
-      if (!agent) throw new Error("Agente OpenCode no verificable")
-      return { id: session.id, parentID: session.parentID, agent,
-        title: session.title ?? "", created: session.time.created, directory: session.location.directory }
-    }
-    setSessionResolver(identity)
+    const identity = makeIdentity(ctx)
     // Register explicitly: V2 does not expose the legacy tools/ files by itself.
     await ctx.tool.transform((editor) => {
       for (const [name, definition] of Object.entries({
@@ -50,7 +36,8 @@ export default Plugin.define({
             await ctx.permission.assert({ sessionID: context.sessionID, agent: context.agent,
               source: { type: "tool", messageID: context.messageID, id: context.id },
               action: name, resources: ["*"], save: ["*"] })
-            return { content: await definition.execute(schema.parse(input) as never, context as never) as string }
+            return { content: await definition.execute(schema.parse(input) as never,
+              { ...context, resolver: identity } as never) as string }
           },
         })
       }

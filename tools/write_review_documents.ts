@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./define_tool.ts"
 import { publishReview } from "./session_store.ts"
 
 export default tool({
@@ -11,6 +11,6 @@ export default tool({
   async execute(args, context) {
     if (context.agent !== "revisor") throw new Error("Solo revisor puede publicar revisiones")
     return JSON.stringify(await publishReview({ sessionID: context.sessionID, messageID: context.messageID,
-      delivery: args.entrega, sanity: args.sanidad, dispute: args.disputa }))
+      delivery: args.entrega, sanity: args.sanidad, dispute: args.disputa }, { get: context.resolver }))
   },
 })

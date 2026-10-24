@@ -117,7 +117,9 @@ El contrato está en [flujo-arquitectura.md](./flujo-arquitectura.md), instalado
 
 Los campos de configuración y sus valores iniciales están en `agent-settings.example.json`; las compatibilidades se validan en `tools/agent_settings.ts`. Para continuar arquitectura aporta el último plan y su handoff, aplicando la rama de intentos de `publicacion-revision.md` a los mismos encargos.
 
-`tools/session_store.ts` asigna carpetas según la sesión verificada por `plugin/agent-session.ts`, rechaza archivos ajenos y no sobrescribe publicaciones. El adaptador de OpenCode proporciona la identidad de cada llamada; una integración nueva necesitará su propio adaptador y fuentes documentadas.
+`tools/session_store.ts` asigna carpetas según la sesión verificada por `plugin/agent-session.ts`, rechaza archivos ajenos y no sobrescribe publicaciones. Cada instancia del plugin inyecta su resolvedor de identidad en las herramientas, sin estado global compartido. El instalador despliega los plugins en `.opencode/plugins/` (plural). Una integración nueva necesitará su propio adaptador y fuentes documentadas.
+
+En proyectos con una instalación anterior, conserva una copia fuera de los directorios de carga y retira únicamente los plugins de este paquete de `.opencode/plugin/` antes de recargar. El instalador no elimina plugins del consumidor. Instala o actualiza sin encargos en vuelo.
 
 Para ejecutar las comprobaciones: `node --test *.test.ts` (Node.js 24 o posterior).
 

@@ -181,7 +181,7 @@ test("actualización APM retira identidades antiguas, migra antes del plugin y c
     }, ["planning-test", "ai-assisted-planning.agent-session", "ai-assisted-planning.markitdown-utf8"])
     const sessionProbe = join(host, "session-probe.mjs")
     await writeFile(sessionProbe, `import assert from "node:assert/strict";
-      import plugin from "./.opencode/plugin/agent-session.ts";
+      import plugin from "./.opencode/plugins/agent-session.ts";
       const agents = {s:"investigador", docs:"lector-documentacion", code:"lector-codigo"};
       let before;
       await plugin.setup({agent:{transform:async()=>{}},permission:{hook:async()=>{}},
@@ -370,6 +370,8 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
     assert.ok(setupFile, "APM debe distribuir también el instalador y su helper de alias")
     const setup = join(modules, setupFile)
     assert.match(run("node", [setup], host), /Jira pendiente/)
+    assert.deepEqual((await readdir(join(host, ".opencode", "plugins"))).sort(), ["agent-session.ts", "markitdown-utf8.ts"])
+    assert.ok(!(await readdir(join(host, ".opencode"))).includes("plugin"), "No se debe recrear el directorio V1")
     const contract = await readFile(join(host, ".opencode", "flujo-arquitectura.md"), "utf8")
     assert.ok(!contract.includes("](.apm/skills/"), "El contrato instalado debe enlazar las skills del consumidor")
     for (const [, target] of contract.matchAll(/\]\(([^)#]+\.md)(?:#[^)]*)?\)/g))

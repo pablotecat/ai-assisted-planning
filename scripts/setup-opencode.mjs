@@ -25,7 +25,8 @@ async function json(path) {
 const configDir = join(host, ".opencode")
 await mkdir(configDir, { recursive: true })
 const recordTools = await prepareInstalledTools(source, configDir)
-for (const dir of ["plugin", "tools"]) await cp(join(source, dir), join(configDir, dir), { recursive: true })
+await cp(join(source, "plugin"), join(configDir, "plugins"), { recursive: true })
+await cp(join(source, "tools"), join(configDir, "tools"), { recursive: true })
 await recordTools()
 const architectureContract = await readFile(join(source, "flujo-arquitectura.md"), "utf8")
 await writeFile(join(configDir, "flujo-arquitectura.md"),

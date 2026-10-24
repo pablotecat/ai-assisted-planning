@@ -5,6 +5,7 @@ import { join } from "node:path"
 import test from "node:test"
 import plugin from "./plugin/agent-session.ts"
 import utf8 from "./plugin/markitdown-utf8.ts"
+import { makeIdentity } from "./tools/identity.ts"
 import { publishSession, type Identity } from "./tools/session_store.ts"
 
 async function adapter(nodes: Record<string, Identity>) {
@@ -12,7 +13,7 @@ async function adapter(nodes: Record<string, Identity>) {
   const tools: Record<string, any> = {}
   const permissions: any[] = []
   const investigator = { permissions: [] as any[] }
-  await plugin.setup({
+  const ctx = {
     agent: { transform: async (fn: any) => fn({ update: (_id: string, update: any) => update(investigator) }) },
     session: {
       get: async ({ sessionID }: any) => {
@@ -30,9 +31,10 @@ async function adapter(nodes: Record<string, Identity>) {
       hook: async (name: string, fn: any) => { hooks[`permission.${name}`] = fn } },
     tool: { transform: async (fn: any) => fn({ add: (tool: any) => { tools[tool.name] = tool } }),
       hook: async (name: string, fn: any) => { hooks[name] = fn } },
-  } as never)
+  }
+  await plugin.setup(ctx as never)
   return {
-    investigator,
+    investigator, resolver: makeIdentity(ctx as never),
     tools, permissions,
     evaluate: (event: any) => hooks["permission.evaluate"](event),
     context: (sessionID: string) => hooks.context({ sessionID, agent: nodes[sessionID].agent }),
@@ -74,7 +76,7 @@ test("la política dinámica de delegación no se relaja por transformaciones de
 
 test("adaptador V2 verifica la autoría del mensaje, publica y bloquea escrituras alternativas", async () => {
   const nodes = { s: { ...base, id: "s", agent: "investigador" } }
-  const { before, investigator } = await adapter(nodes)
+  const { before, investigator, resolver } = await adapter(nodes)
   assert.equal(plugin.id, "ai-assisted-planning.agent-session")
   assert.ok(investigator.permissions.some(rule => rule.action === "subagent" && rule.resource === "revisor" && rule.effect === "allow"))
   for (const tool of ["write", "edit", "patch"])
@@ -84,7 +86,8 @@ test("adaptador V2 verifica la autoría del mensaje, publica y bloquea escritura
   const dir = await mkdtemp(join(tmpdir(), "planning-adapter-"))
   try {
     const input = { sessionID: "s", messageID: "mensaje", agent: "investigador", topic: "duda", files: { "resumen.md": "ok" } }
-    const options = { root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json") }
+    const options = { get: resolver, root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json") }
+    await assert.rejects(publishSession(input, { ...options, get: undefined } as never), /Adaptador de sesión no disponible/)
     const data = await publishSession(input, options)
     assert.equal(data.guardado, true)
     if (data.guardado) assert.equal(await readFile(data.rutas["resumen.md"], "utf8"), "ok")

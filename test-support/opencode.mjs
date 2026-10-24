@@ -19,7 +19,7 @@ export function api(method, path, cwd, env, data) {
   const result = opencode(["api", ...(server ? ["--server", server] : ["--standalone"]), method, path,
     ...(data === undefined ? [] : ["--data", JSON.stringify(data)])], cwd, env)
   assert.equal(result.status, 0, result.error?.message || result.stderr + result.stdout)
-  return JSON.parse(result.stdout)
+  return result.stdout.trim() ? JSON.parse(result.stdout) : undefined
 }
 
 export async function withServer(cwd, env, run, expected = ["planning-test"]) {
