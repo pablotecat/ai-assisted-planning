@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
@@ -23,6 +23,6 @@ export default tool({
     files["incidencias-globales.md"] = args.incidencias_globales
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: historias[0].clave, group: "entrega", files,
-      keys: historias.map((item) => item.clave), sources: args.fuentes, decisions: args.decisiones }))
+      keys: historias.map((item) => item.clave), sources: args.fuentes, decisions: args.decisiones }, { get: context.resolver }))
   },
 })

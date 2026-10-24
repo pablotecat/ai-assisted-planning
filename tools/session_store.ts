@@ -5,8 +5,6 @@ import { readAgentSettings, sessionRoot, type AgentName } from "./agent_settings
 
 export type Identity = { id: string; parentID?: string; agent: string; title: string; created: number; directory: string }
 export type Resolver = (id: string, messageID?: string) => Promise<Identity>
-let resolver: Resolver | undefined
-export function setSessionResolver(value: Resolver) { resolver = value }
 
 const agentNames: Record<string, AgentName> = {
   arquitecto: "arquitecto",
@@ -63,6 +61,7 @@ function rootName(created: number, agent: AgentName, title: string) {
   return `${stamp}__${kind}__${slug(title)}`
 }
 async function chain(id: string, messageID: string | undefined, get: Resolver) {
+  if (typeof get !== "function") throw new Error("Adaptador de sesión no disponible")
   const nodes: Identity[] = []
   const visited = new Set<string>()
   for (let current: string | undefined = id; current; ) {
@@ -144,13 +143,13 @@ export type Publication = { guardado: false } | { guardado: true; rutas: Record<
 export async function publishSession(input: {
   sessionID: string; messageID?: string; agent: string; topic: string;
   files: Record<string, string>; group?: string; sources?: string[]; decisions?: string[]; keys?: string[]
-}, options: { get?: Resolver; root?: string; settingsPath?: string } = {}): Promise<Publication> {
+}, options: { get: Resolver; root?: string; settingsPath?: string }): Promise<Publication> {
   const names = Object.keys(input.files)
   if (!names.length || names.some((name) => !input.files[name]?.trim())) throw new Error("Entregables vacíos")
   names.forEach(safeName)
   if (input.group && input.group !== "Originales" && !/^[a-z][a-z0-9-]*$/.test(input.group)) throw new Error("Grupo no permitido")
   if (input.group === "Originales" && input.agent !== "planificador") throw new Error("Solo el planificador puede publicar originales")
-  const nodes = await chain(input.sessionID, input.messageID, options.get ?? resolver ?? (() => { throw new Error("Adaptador de sesión no disponible") }))
+  const nodes = await chain(input.sessionID, input.messageID, options.get)
   if (nodes.at(-1)!.agent !== input.agent) throw new Error("Autor de publicación diferente")
   const settings = await readAgentSettings(options.settingsPath)
   if (!settings.agentes[agentNames[input.agent]].guardarEntregablesEnSesion) return { guardado: false }
@@ -281,9 +280,9 @@ export async function publishSession(input: {
 // Append reviewer-authored reports to an existing, indexed delivery of its direct parent.
 export async function publishReview(input: {
   sessionID: string; messageID?: string; delivery: string; sanity?: string; dispute?: string
-}, options: { get?: Resolver; root?: string; settingsPath?: string } = {}): Promise<Publication> {
+}, options: { get: Resolver; root?: string; settingsPath?: string }): Promise<Publication> {
   if (!input.sanity?.trim() && !input.dispute?.trim()) throw new Error("Documento de revisión vacío")
-  const nodes = await chain(input.sessionID, input.messageID, options.get ?? resolver ?? (() => { throw new Error("Adaptador de sesión no disponible") }))
+  const nodes = await chain(input.sessionID, input.messageID, options.get)
   const reviewer = nodes.at(-1)!
   const producer = nodes.at(-2)
   if (reviewer.agent !== "revisor" || !producer) throw new Error("Revisor delegado por un productor requerido")

@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
@@ -13,6 +13,6 @@ export default tool({
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: historias[0].clave, group: "Originales",
       files: Object.fromEntries(historias.map((item) => [`${item.clave}.md`, item.contenido])),
-      keys: historias.map((item) => item.clave) }))
+      keys: historias.map((item) => item.clave) }, { get: context.resolver }))
   },
 })

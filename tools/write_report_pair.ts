@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
@@ -14,6 +14,6 @@ export default tool({
     if (context.agent !== "investigador") throw new Error("Solo investigador puede publicar informes")
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: args.slug, group: "consulta", sources: args.fuentes, decisions: args.decisiones,
-      files: { "resumen-ejecutivo.md": args.resumen_ejecutivo, "informe-detallado.md": args.informe_detallado } }))
+      files: { "resumen-ejecutivo.md": args.resumen_ejecutivo, "informe-detallado.md": args.informe_detallado } }, { get: context.resolver }))
   },
 })

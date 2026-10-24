@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
@@ -13,6 +13,6 @@ export default tool({
     if (!["arquitecto", "arquitecto-test", "refinador", "investigador", "lector-codigo", "lector-documentacion"].includes(context.agent)) throw new Error("Agente no autorizado")
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: args.nombre, files: { [args.nombre]: args.contenido },
-      sources: args.fuentes, decisions: args.decisiones }))
+      sources: args.fuentes, decisions: args.decisiones }, { get: context.resolver }))
   },
 })
