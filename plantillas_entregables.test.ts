@@ -29,7 +29,7 @@ function headingId(text: string) {
 }
 
 test("formatos y catálogo tienen punteros locales resolubles, incluidos los destinos compartidos", async () => {
-  const documents = ["README.md", "flujo-arquitectura.md",
+  const documents = ["README.md", "AGENTS.md", "flujo-arquitectura.md",
     ...(await readdir(join(source, ".apm"), { recursive: true }))
       .filter(name => name.endsWith(".md")).map(name => `.apm/${name}`)]
   const missing = new Set<string>()
@@ -68,7 +68,7 @@ test("consumidores comparten las referencias y el catálogo cubre los intercambi
     assert.ok(links(reference).some(link => link.split("#")[0] === "../../operativa-comun/references/publicacion-revision.md"),
       `${format}: puntero directo a la norma de publicación/revisión e intentos`)
   }
-  const catalog = (await read("README.md")).split("## Catálogo de entregables")[1]
+  const catalog = (await read("README.md")).split("## Inspect deliverables")[1]
   const destinations = links(catalog)
   for (const format of formats) assert.ok(destinations.includes(`${skill}/references/${format}.md`), format)
   for (const owner of ["planificador", "lector-codigo", "lector-documentacion", "investigador"])
