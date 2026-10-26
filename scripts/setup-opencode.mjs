@@ -6,6 +6,7 @@ import { createRequire } from "node:module"
 import { jiraAliasStatus } from "./jira-aliases.mjs"
 import { migrateAgentSettings } from "./migrate-agent-settings.mjs"
 import { prepareInstalledTools } from "./migrate-installed-tools.mjs"
+import { verifyOpenCode } from "./verify-opencode.mjs"
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const host = process.cwd()
@@ -23,11 +24,17 @@ async function json(path) {
 }
 
 const configDir = join(host, ".opencode")
+// Older migrations created a second registrar. Never overwrite its tools underneath it.
+for (const [directory, name] of [["plugin", "agent-session.ts"], ["plugin", "markitdown-utf8.ts"], ["plugins", "project-tools.ts"]]) {
+  const path = join(configDir, directory, name)
+  let text
+  try { text = await readFile(path, "utf8") }
+  catch (error) { if (error.code === "ENOENT") continue; throw error }
+  if (/session_store|write_planning_|oca\.project-tools|PYTHONIOENCODING/.test(text))
+    throw new Error(`Plugin de una instalación anterior: ${path}. Muévelo a una copia de seguridad FUERA de .opencode/plugin y .opencode/plugins y repite la instalación. No se ha sobrescrito ningún componente.`)
+}
 await mkdir(configDir, { recursive: true })
 const recordTools = await prepareInstalledTools(source, configDir)
-await cp(join(source, "plugin"), join(configDir, "plugins"), { recursive: true })
-await cp(join(source, "tools"), join(configDir, "tools"), { recursive: true })
-await recordTools()
 const architectureContract = await readFile(join(source, "flujo-arquitectura.md"), "utf8")
 await writeFile(join(configDir, "flujo-arquitectura.md"),
   architectureContract.replaceAll("](.apm/skills/", "](../.agents/skills/"))
@@ -38,11 +45,13 @@ const packagePath = join(configDir, "package.json")
 const packageConfig = await json(packagePath)
 const dependency = (await json(join(source, "package.json"))).dependencies
 packageConfig.type ??= "module"
-packageConfig.dependencies = { ...dependency, ...packageConfig.dependencies }
+packageConfig.dependencies = { ...packageConfig.dependencies, ...dependency }
 await writeFile(packagePath, JSON.stringify(packageConfig, null, 2) + "\n")
 if (process.platform === "win32") run("cmd.exe", ["/d", "/s", "/c", "npm install"], configDir)
 else run("npm", ["install"], configDir)
 const { applyEdits, modify, parse } = createRequire(packagePath)("jsonc-parser")
+await cp(join(source, "tools"), join(configDir, "tools"), { recursive: true })
+await recordTools()
 
 const candidates = [join(configDir, "opencode.jsonc"), join(configDir, "opencode.json"),
   join(host, "opencode.jsonc"), join(host, "opencode.json")]
@@ -74,11 +83,7 @@ const { settingsSchema } = await import(pathToFileURL(join(configDir, "tools", "
 if (await migrateAgentSettings(join(configDir, "agent-settings.json"), value => settingsSchema.parse(value)))
   console.log("Ajustes migrados a los nombres actuales; se han conservado los valores del proyecto y de los agentes.")
 
-// V2 returns ordered configuration sources, including global and JSONC MCP entries.
-const effective = spawnSync(process.platform === "win32" ? "cmd.exe" : "opencode",
-  process.platform === "win32" ? ["/d", "/s", "/c", "opencode api --standalone get /api/config"] : ["api", "--standalone", "get", "/api/config"],
-  { cwd: host, encoding: "utf8", timeout: 120_000, maxBuffer: 4 * 1024 * 1024 })
-if (effective.error) throw effective.error
-if (effective.status !== 0) throw new Error(`No se pudo verificar la configuración. Ejecuta «opencode api --standalone get /api/config» y corrige el error antes de usar los agentes.\n${effective.stderr}`)
-console.log(jiraAliasStatus(JSON.parse(effective.stdout)))
-console.log(`\nComponentes instalados. Cierra y reinicia OpenCode en ${host}. Abre sesiones nuevas; continúa con los documentos y el handoff anteriores, conservando decisiones e intentos consumidos. Ajustes opcionales: ${join(configDir, "agent-settings.json")}.`)
+// Deploy entrypoints only after their dependencies and settings are ready.
+await cp(join(source, "plugin"), join(configDir, "plugins"), { recursive: true })
+console.log(jiraAliasStatus(await verifyOpenCode(host)))
+console.log(`\nComponentes instalados y plugins verificados en un servidor privado. Cierra y reinicia OpenCode en ${host}; reinicia también el servicio con «opencode service restart» antes de usar los agentes. Abre sesiones nuevas; continúa con los documentos y el handoff anteriores, conservando decisiones e intentos consumidos. Ajustes opcionales: ${join(configDir, "agent-settings.json")}.`)
