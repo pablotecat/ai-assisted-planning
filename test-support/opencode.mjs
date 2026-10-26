@@ -1,18 +1,11 @@
 import assert from "node:assert/strict"
-import { spawn, spawnSync } from "node:child_process"
-import { existsSync } from "node:fs"
+import { spawn } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { join } from "node:path"
+import { executable, opencode } from "../scripts/verify-opencode.mjs"
 
-// Invoke the executable directly on Windows so JSON bodies retain their quotes.
-const executable = process.platform === "win32" ? (process.env.PATH ?? "").split(";")
-  .flatMap(dir => [join(dir, "opencode.exe"), join(dir, "node_modules", "@opencode", "cli", "bin", "opencode.exe")])
-  .find(path => existsSync(path)) ?? "opencode" : "opencode"
-
-export function opencode(args, cwd, env = process.env) {
-  return spawnSync(executable, args, { cwd, env, encoding: "utf8", timeout: 120_000, maxBuffer: 8 * 1024 * 1024 })
-}
+export { opencode }
 
 export function api(method, path, cwd, env, data) {
   const server = env?.OPENCODE_TEST_SERVER

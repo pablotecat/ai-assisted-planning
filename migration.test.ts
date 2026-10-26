@@ -3,12 +3,15 @@ import { mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from "node:fs/
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { migrateAgentSettings, migrateSettings } from "./scripts/migrate-agent-settings.mjs"
 import { prepareInstalledTools } from "./scripts/migrate-installed-tools.mjs"
 import { settingsSchema } from "./tools/agent_settings.ts"
 
 const example = JSON.parse(await readFile(new URL("./agent-settings.example.json", import.meta.url), "utf8"))
 const validate = (value: unknown) => settingsSchema.parse(value)
+const setup = fileURLToPath(new URL("./scripts/setup-opencode.mjs", import.meta.url))
 const renames = { coordinador: "investigador", codigo: "lector-codigo", documentacion: "lector-documentacion", refinamiento: "refinador" }
 
 function legacySettings() {
@@ -101,5 +104,25 @@ test("las herramientas personalizadas se conservan y las colisiones se comunican
     await writeFile(current, "colisión personalizada")
     await assert.rejects(prepareInstalledTools(process.cwd(), dir), /Colisión.*investigator_defaults.ts/)
     assert.equal(await readFile(current, "utf8"), "colisión personalizada")
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})
+
+test("instalador rechaza registradores antiguos antes de modificar el consumidor", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "plugins-collision-"))
+  try {
+    for (const [folder, name, text] of [["plugin", "agent-session.ts", 'import "../tools/session_store.ts"'],
+      ["plugin", "markitdown-utf8.ts", 'env.PYTHONIOENCODING = "utf-8"'],
+      ["plugins", "project-tools.ts", 'export default { id: "oca.project-tools" }']]) {
+      const config = join(dir, ".opencode"), path = join(config, folder, name)
+      await mkdir(join(config, folder), { recursive: true })
+      await writeFile(path, text)
+      const result = spawnSync(process.execPath, [setup], { cwd: dir, encoding: "utf8" })
+      assert.notEqual(result.status, 0)
+      assert.match(result.stderr, /Plugin de una instalación anterior/)
+      assert.ok(result.stderr.includes(path))
+      assert.equal(await readFile(path, "utf8"), text)
+      assert.deepEqual(await readdir(config), [folder])
+      await rm(join(config, folder), { recursive: true })
+    }
   } finally { await rm(dir, { recursive: true, force: true }) }
 })

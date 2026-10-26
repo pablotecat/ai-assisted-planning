@@ -3,12 +3,15 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import test from "node:test"
+import { spawnSync } from "node:child_process"
+import { tmpdir } from "node:os"
 import { api, opencode, probe, probePlugin, withServer } from "./test-support/opencode.mjs"
 
 const source = fileURLToPath(new URL(".", import.meta.url))
 
-async function fixture() {
-  const parent = join(source, "build", "tmp")
+async function fixture(installed = false) {
+  // Installed plugins must resolve their own dependencies, not this repository's node_modules.
+  const parent = installed ? join(tmpdir(), "opencode") : join(source, "build", "tmp")
   await mkdir(parent, { recursive: true })
   const root = await mkdtemp(join(parent, "publication-"))
   const config = join(root, ".opencode")
@@ -22,6 +25,7 @@ async function fixture() {
     APPDATA: join(root, "appdata"), LOCALAPPDATA: join(root, "localappdata"),
     XDG_CONFIG_HOME: join(root, "config"), XDG_CACHE_HOME: join(root, "cache"),
     XDG_DATA_HOME: join(root, "data"), XDG_STATE_HOME: join(root, "state"),
+    npm_config_cache: join(process.env.LOCALAPPDATA ?? tmpdir(), "npm-cache"),
     OPENCODE_CONFIG_DIR: join(root, "config", "opencode"), OPENCODE_CONFIG: "",
     OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugins: [probePlugin] }),
     OPENCODE_DISABLE_DEFAULT_PLUGINS: "1", OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
@@ -29,6 +33,17 @@ async function fixture() {
   await writeFile(join(config, "opencode.json"), JSON.stringify({ agents: Object.fromEntries(
     ["investigador", "planificador", "revisor"].map(id => [id, { mode: "all", permissions:
       [{ action: "*", resource: "*", effect: "allow" }] }])) }))
+  if (installed) {
+    await writeFile(join(config, "package.json"), JSON.stringify({ type: "module",
+      dependencies: { "jsonc-parser": "0.0.1", zod: "4.1.8" } }))
+    const result = spawnSync(process.execPath, [join(source, "scripts", "setup-opencode.mjs")],
+      { cwd: root, env, encoding: "utf8", timeout: 240_000 })
+    assert.equal(result.status, 0, result.error?.message || result.stderr + result.stdout)
+    assert.match(result.stdout, /plugins verificados/)
+    const dependencies = JSON.parse(await readFile(join(config, "package.json"), "utf8")).dependencies
+    assert.equal(dependencies["jsonc-parser"], "3.3.1")
+    assert.equal(dependencies.zod, "4.1.8", "Dependencia ajena conservada")
+  }
   return { root, config, env }
 }
 
@@ -82,10 +97,18 @@ test("los cinco publicadores conservan su resolvedor aunque se inicialice otra i
 
 test("servicio OpenCode real: los cinco publicadores guardan antes y después de recargar el location", {
   skip: opencode(["--version"], source).status !== 0 ? "Requiere OpenCode en PATH" : false,
-  timeout: 120_000,
+  timeout: 300_000,
 }, async () => {
-  const { root, env } = await fixture()
+  const { root, config, env } = await fixture(true)
   try {
+    const broken = join(config, "plugins", "zz-broken.ts")
+    await writeFile(broken, 'export default { id: "broken", setup() { throw new Error("Fallo de prueba") } }')
+    const failed = spawnSync(process.execPath, [join(source, "scripts", "verify-opencode.mjs")],
+      { cwd: root, env, encoding: "utf8", timeout: 120_000 })
+    assert.notEqual(failed.status, 0)
+    assert.match(failed.stderr, /Plugins que no cargan/)
+    assert.ok(failed.stderr.includes(broken))
+    await rm(broken)
     await withServer(root, env, async connected => {
       const template = api("post", "/api/session", root, connected, { agent: "planificador", title: "Plantilla" }).data
       async function round(label: string) {
