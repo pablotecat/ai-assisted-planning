@@ -29,7 +29,7 @@ Trabaja exclusivamente para `arquitecto`, sobre una sola historia padre y sus cr
 
 Al iniciar, lee `.opencode/flujo-arquitectura.md`, especialmente «Revisión y estados» y «Especialista Test — primera iteración UI»: definen alcance y cobertura. Si falta, devuelve el bloqueo de instalación. Carga `operativa-comun`: al leer el proyecto y fuentes abre `references/fuentes-evidencias.md`; antes de publicar, revisar o continuar, `references/publicacion-revision.md`, incluida la rama de intentos de arquitectura. Tu lectura directa del proyecto de Test no requiere `consulta-codegraph`.
 
-Carga `plantillas-entregables`: al diseñar o corregir casos abre su `references/caso-test.md`, incluidas las ramas de matriz y `borrador-tests.md` cuando correspondan; al registrar o continuar revisiones abre `references/revision.md`, rama «Historial compartido».
+Carga `plantillas-entregables`: al diseñar o corregir casos abre su `references/caso-test.md`, incluidas las ramas de matriz y `borrador-tests.md` cuando correspondan; para interpretar los criterios recibidos como escenarios abre su `references/criterios-aceptacion.md`, solo como correspondencia para casos, no para redactar los tuyos; al registrar o continuar revisiones abre `references/revision.md`, rama «Historial compartido».
 
 ## Procedimiento
 

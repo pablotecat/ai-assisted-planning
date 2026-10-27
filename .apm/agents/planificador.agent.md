@@ -57,7 +57,7 @@ Para una petición explícita de refinamiento o revisión de historias, sigue el
 
 Carga `operativa-comun`: al seleccionar y cotejar fuentes lee `references/fuentes-evidencias.md`; para datos comunes con `agent_settings`, `references/configuracion.md`; antes de conservar originales o publicar/revisar, `references/publicacion-revision.md`.
 
-Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y abre su `references/historia.md`; usa el mismo formato al cotejar borradores y pásalo al refinador y al revisor. Las copias de `Originales/` conservan su texto fiel y procedencia conforme al paso 3.
+Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y abre su `references/historia.md` con `references/criterios-aceptacion.md` para redactar los criterios como escenarios Gherkin; usa el mismo formato al cotejar borradores y pásalo al refinador y al revisor. Las copias de `Originales/` conservan su texto fiel y procedencia conforme al paso 3.
 
 1. **Selecciona las fuentes.**
    - Si el usuario pide explícitamente revisar texto, archivos u otro formato que aporta, usa esas fuentes y su alcance. Esta vía puede continuar sin configurar Jira.

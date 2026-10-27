@@ -138,7 +138,7 @@ For refined stories and UI test proposals, check the review from `revisor` befor
 Consult the source for the output you need to check:
 
 - Check `Originales/<ID>.md` with the [planner instructions](.apm/agents/planificador.agent.md) and [original publisher](tools/write_planning_originals.ts). Preserve the source text rather than applying the refined-story format.
-- Check `<ID>.md`, `borrador.md`, `<ID>-incidencias.md`, and `incidencias-globales.md` with the [story format](.apm/skills/plantillas-entregables/references/historia.md), [story criteria](.apm/skills/user-stories/SKILL.md), and [delivery publisher](tools/write_planning_deliverables.ts).
+- Check `<ID>.md`, `borrador.md`, `<ID>-incidencias.md`, and `incidencias-globales.md` with the [story format](.apm/skills/plantillas-entregables/references/historia.md), [acceptance criteria scenarios](.apm/skills/plantillas-entregables/references/criterios-aceptacion.md), [story criteria](.apm/skills/user-stories/SKILL.md), and [delivery publisher](tools/write_planning_deliverables.ts).
 - Check specialist assignments with the [assignment format](.apm/skills/plantillas-entregables/references/encargo.md).
 - Check technical blocks with the [task format](.apm/skills/plantillas-entregables/references/tarea.md).
 - Check `borrador-tests.md` with the [UI case and matrix format](.apm/skills/plantillas-entregables/references/caso-test.md).

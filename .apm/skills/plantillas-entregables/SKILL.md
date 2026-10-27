@@ -1,12 +1,13 @@
 ---
 name: plantillas-entregables
-description: 'Historia, Tarea, Encargo, Revisión y Caso de Test: define el formato Markdown al redactar, integrar o revisar estos entregables y sus contenedores.'
+description: 'Historia, criterios de aceptación en Gherkin, Tarea, Encargo, Revisión y Caso de Test: define el formato Markdown al redactar, integrar o revisar estos entregables y sus contenedores.'
 ---
 
 # Plantillas de entregables
 
 1. **Elegir.** Abre solo la referencia del contenido que vas a redactar o comprobar:
    - [Historia](references/historia.md): historia refinada, división, `borrador.md` e incidencias de planificación.
+   - [Criterios de aceptación](references/criterios-aceptacion.md): escenarios Gherkin de las historias y su correspondencia de solo lectura para casos de test.
    - [Tarea](references/tarea.md): bloque técnico o propuesta de subtarea para el gestor.
    - [Encargo](references/encargo.md): delegación a un especialista o paquete pendiente de capacidad.
    - [Revisión](references/revision.md): `sanity-check.md`, disputa e historial de versiones revisadas.

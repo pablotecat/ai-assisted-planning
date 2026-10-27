@@ -8,6 +8,8 @@ Clasifica cada caso como **reutilizar**, **actualizar** o **crear**, citando el 
 
 Una matriz agrupa variantes con el mismo objetivo y procedimiento: cada fila tiene ID estable, datos/condiciones y resultado verificable, además de estado. Explica su contribución de cobertura. Si cambia sustancialmente el procedimiento o el comportamiento, crea otro caso. Un caso puede cubrir varios criterios de su única historia padre y un criterio puede requerir varios casos.
 
+Los criterios recibidos llegan como escenarios Gherkin según [criterios de aceptación](criterios-aceptacion.md); interpreta su correspondencia con el caso —Dado alimenta las precondiciones, Cuando produce los pasos, Entonces y sus cláusulas Y producen los resultados esperados— pero los casos de test no se redactan en Gherkin y una cláusula Y nunca genera un caso independiente.
+
 **Cierre:** cada criterio asignado y cada variante tiene fundamento, cobertura/estado y dependencias explícitos; cada aprobado remite a revisión exacta verificable. Las dependencias y comprobación global del arquitecto determinan qué está listo para copiar.
 
 ## Plantilla copiable — caso
