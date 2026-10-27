@@ -9,11 +9,11 @@ import { probe, probePlugin, withServer } from "./test-support/opencode.mjs"
 
 const source = fileURLToPath(new URL(".", import.meta.url))
 const skill = ".apm/skills/plantillas-entregables"
-const formats = ["historia", "tarea", "encargo", "revision", "caso-test"]
+const formats = ["historia", "criterios-aceptacion", "tarea", "encargo", "revision", "caso-test"]
 const consumers: Record<string, string[]> = {
-  planificador: ["historia"], refinador: ["historia"],
+  planificador: ["historia", "criterios-aceptacion"], refinador: ["historia", "criterios-aceptacion"],
   arquitecto: ["encargo", "tarea", "caso-test", "revision"],
-  "arquitecto-test": ["caso-test", "revision"], revisor: formats,
+  "arquitecto-test": ["caso-test", "criterios-aceptacion", "revision"], revisor: formats,
 }
 const common = ["fuentes-evidencias", "configuracion", "publicacion-revision"]
   .map(name => `.apm/skills/operativa-comun/references/${name}.md`)
@@ -167,6 +167,6 @@ test("APM distribuye plantillas y OpenCode las carga y lee desde cada consumidor
       }
     }
     })
-    t.diagnostic("Cinco consumidores: skill invocada; 13 lecturas reales cubren las cinco referencias; sin llamadas LLM ni Jira")
+    t.diagnostic("Cinco consumidores: skill invocada; 17 lecturas reales cubren las seis referencias; sin llamadas LLM ni Jira")
   } finally { await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
 })

@@ -6,6 +6,8 @@ Revisor usa el formato de dictamen para `sanity-check.md`, incluso sin hallazgos
 
 Todos los apartados son obligatorios. Intento, límite e historial se incluyen cuando la norma compartida los exige. Identifica la entrega por ruta confirmada y versión exacta; para una carpeta, delimita todos sus archivos. En una revisión parcial enumera aprobados con dependencias, pendientes y bloqueados según la norma y estados aplicables.
 
+Al revisar historias, aplica [criterios de aceptación](criterios-aceptacion.md): un criterio que no sea un escenario completo y autónomo, una regla publicada como criterio, una cláusula «Y» huérfana publicada como criterio independiente o evidencia dentro del cuerpo de un criterio son hallazgos materiales con impacto en la utilización de la entrega, no cuestiones cosméticas. Comprueba también que la trazabilidad al original y la evidencia residan en el archivo de incidencias con todos los criterios originales cubiertos.
+
 **Cierre:** todos los criterios y elementos del alcance tienen resultado o pendiente explícito, cada hallazgo tiene evidencia/impacto/corrección, y el dictamen identifica inequívocamente su versión. El fallo de revisión o guardado conserva el resultado y el bloqueo, sin atribuir informe guardado.
 
 ## Plantilla copiable — dictamen
