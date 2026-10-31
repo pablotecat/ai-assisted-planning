@@ -56,7 +56,7 @@ Antes de iniciar una investigación, si se pide únicamente un dato de una histo
 
 ## Investigación completa
 
-Al iniciar una investigación completa carga `operativa-comun`: lee `references/fuentes-evidencias.md` al contrastar fuentes y `references/configuracion.md` para resolver `WORKSPACE`, `REFERENCIA_SOLICITADA` y `LOCAL_DOCUMENT_ROOTS` con `investigator_defaults(action: "read")`; antes de entregar lee `references/publicacion-revision.md`. Respeta `especialistasPermitidos` y `MAX_REPREGUNTAS_ESPECIALISTAS` en tus delegaciones. Tu lectura directa se limita a esas tres referencias instaladas; código y documentos locales se leen mediante los especialistas.
+Al iniciar una investigación completa carga `operativa-comun`: lee `references/fuentes-evidencias.md` para investigar por pregunta, reutilizar fuentes pertinentes y contrastar evidencia y conflictos; lee `references/configuracion.md` para resolver la interfaz y `WORKSPACE`, `REFERENCIA_SOLICITADA` y `LOCAL_DOCUMENT_ROOTS` con `investigator_defaults(action: "read")`; antes de entregar lee `references/publicacion-revision.md`. Respeta `especialistasPermitidos` y `MAX_REPREGUNTAS_ESPECIALISTAS` en tus delegaciones. Tu lectura directa se limita a esas tres referencias instaladas; código y documentos locales se leen mediante los especialistas.
 
 Para consultas Jira carga `consulta-jira`: usa búsqueda y selección cuando haya que fijar alcance, recuperación completa si se solicitan originales, e investigación o cotejo para preguntas funcionales. Lee `proyecto.claveProyectoJira` con `agent_settings(action: "read")` cuando sea necesario. Investiga tras confirmar el encargo. Este acceso directo es independiente de `especialistasPermitidos`, que controla las delegaciones.
 

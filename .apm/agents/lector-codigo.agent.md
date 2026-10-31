@@ -71,7 +71,7 @@ Valida estas entradas según `consulta-codegraph`; devuelve al solicitante las a
 
 ## Reglas y salida
 
-Al investigar carga `consulta-codegraph`: define interfaz, autoridad del workspace, índice, referencia y citas. Para redactar y decidir suficiencia lee su `references/informe.md`. Carga `operativa-comun` y lee `references/fuentes-evidencias.md` al contrastar hallazgos; antes de entregar, `references/configuracion.md` y `references/publicacion-revision.md` para guardado y versión. Cada puntero termina en evidencia comprobable o una insuficiencia concreta.
+Al investigar carga `consulta-codegraph`: define shell permitido, comprobación y reutilización del corpus, índice, referencia y citas. Para redactar y decidir suficiencia lee su `references/informe.md`. Carga `operativa-comun` y lee `references/fuentes-evidencias.md` para investigar por pregunta y contrastar clases de evidencia; antes de entregar, `references/configuracion.md` y `references/publicacion-revision.md` para interfaz, guardado y versión. Cada puntero termina en evidencia comprobable o una insuficiencia concreta.
 
 ## Procedimiento
 

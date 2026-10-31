@@ -262,6 +262,48 @@ test("contrato documental: consulta puntual anterior al arranque y refinamiento 
     assert.ok(publication.includes(required), required)
 })
 
+test("contrato documental: interfaz directa, catálogo parcial y estados de publicación diferenciados", async () => {
+  const rules = await readFile(join(source, ".apm", "skills", "operativa-comun", "references", "configuracion.md"), "utf8")
+  for (const state of ["Declarada, no invocada", "Inventario parcial", "Denegada", "Error de invocación o ejecución",
+    "Guardado desactivado", "Publicada", "guardado:false", "guardado:true"])
+    assert.ok(rules.includes(state), state)
+  assert.match(rules, /se invocan directamente/)
+  assert.match(rules, /no requiere escrituras de prueba/)
+  assert.match(rules, /Si una operación no se ha invocado/)
+  const publication = await readFile(join(source, ".apm", "skills", "operativa-comun", "references", "publicacion-revision.md"), "utf8")
+  assert.ok(publication.includes("configuracion.md#herramientas-y-autorizaciones"))
+  await checkPointers(join(source, ".apm", "skills"))
+})
+
+test("contrato documental: corpus vigente, fuerza de evidencia y expansión por pregunta en sus propietarios", async () => {
+  // These are documentary regressions, not evidence that a model follows the rules.
+  const cases = JSON.parse(await readFile(join(source, "test-support", "operation-cases.json"), "utf8"))
+  assert.deepEqual(Object.fromEntries(Object.entries(cases).map(([group, cases]: [string, any]) => [group, cases.length])),
+    { corpus: 4, evidencia: 4, preguntas: 2 })
+  const scenarios = Object.values(cases).flat() as { id: string; entrada: string; esperado: string }[]
+  assert.equal(new Set(scenarios.map(c => c.id)).size, scenarios.length)
+  for (const scenario of scenarios) assert.ok(scenario.entrada.trim() && scenario.esperado.trim(), scenario.id)
+  const code = await readFile(join(source, ".apm", "skills", "consulta-codegraph", "SKILL.md"), "utf8")
+  for (const rule of [/workdir/, /Cero pendientes.*avisos relevantes/, /antigüedad por sí sola/, /corpus es anterior/,
+    /NO DETERMINADO/, /un cambio relevante exige renovar/, /git branch --show-current/, /git rev-parse HEAD/])
+    assert.match(code, rule)
+  const report = await readFile(join(source, ".apm", "skills", "consulta-codegraph", "references", "informe.md"), "utf8")
+  for (const field of ["Commit y relación", "avisos relevantes", "reutilizada o renovada", "siguiente fuente"])
+    assert.ok(report.includes(field), field)
+  const evidence = await readFile(join(source, ".apm", "skills", "operativa-comun", "references", "fuentes-evidencias.md"), "utf8")
+  for (const field of ["Requisito documental", "Inferencia de código", "Comprobación escrita en un test", "Resultado de ejecución",
+    "Comportamiento observado", "RowVersion", "mínimo y máximo", "fuentes comunes", "condición de parada", "responsable humano"])
+    assert.ok(evidence.includes(field), field)
+  assert.match(evidence, /comentario general no revoca una excepción/)
+  assert.match(evidence, /en los apartados existentes/)
+  assert.match(evidence, /enlaces remotos de todas las historias por defecto/)
+  assert.match(evidence, /Sin presupuesto numérico/)
+  for (const name of ["consulta-codegraph", "consulta-jira"]) {
+    const text = await readFile(join(source, ".apm", "skills", name, "SKILL.md"), "utf8")
+    assert.ok(text.includes("fuentes-evidencias.md#investigación-por-pregunta"), name)
+  }
+})
+
 test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para ambos alias", {
   skip: version.status !== 0 ? "Requiere la CLI opencode en PATH" : false,
   timeout: 240_000,

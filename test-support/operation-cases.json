@@ -1,0 +1,58 @@
+{
+  "corpus": [
+    {
+      "id": "corpus-anterior",
+      "entrada": "Workspace en base, índice completo sin pendientes; la pregunta se refiere a feature-v2 no incorporada. La búsqueda de NuevaRegla devuelve cero resultados.",
+      "esperado": "INSUFICIENTE para feature-v2; ausencia funcional NO DETERMINADO. Conservar la referencia comprobada y solicitar el corpus del cambio, sin cambiar ramas."
+    },
+    {
+      "id": "referencia-no-demostrada",
+      "entrada": "La historia está en QA. No hay relación comprobada entre su entrega y el commit del workspace preparado.",
+      "esperado": "QA no demuestra presencia en la rama; conservar pendiente la relación con el cambio y limitar las conclusiones al corpus comprobado."
+    },
+    {
+      "id": "arbol-modificado",
+      "entrada": "Ya se comprobó el corpus, pero modulo.txt cambia después de la indexación.",
+      "esperado": "Invalidar la comprobación reutilizada afectada; renovar la verificación del árbol y del índice antes de atribuir hallazgos a ese estado."
+    },
+    {
+      "id": "cero-pendientes-con-avisos",
+      "entrada": "pendingChanges vale 0 e index.state es complete; status avisa de cambios relevantes en modulo.txt. lastIndexed es antiguo.",
+      "esperado": "Mantener reserva de coherencia por el aviso; ni cero pendientes demuestra correspondencia ni la antigüedad por sí sola demuestra invalidez."
+    }
+  ],
+  "evidencia": [
+    {
+      "id": "test-sin-ejecutar",
+      "entrada": "Solo se ha leído el test que comprueba rechazo de borrador obsoleto.",
+      "esperado": "Afirmar qué comprueba el test, no que la funcionalidad funciona ni que el test pasó."
+    },
+    {
+      "id": "versionado-sin-http-observado",
+      "entrada": "El código usa RowVersion; no hay ejecución ni traza de respuesta HTTP.",
+      "esperado": "Identificar el mecanismo como inferencia de código; un HTTP 500 concreto sigue no determinado, aunque la afirmación se etiquete como inferencia."
+    },
+    {
+      "id": "excepcion-frente-a-comentario-general",
+      "entrada": "E2 exige conservar la fecha al borrar el último mensaje de un elemento cerrado. Un comentario general habla de retroceder estado al borrar mensajes.",
+      "esperado": "Conservar E2 como requisito explícito y preguntar por el alcance del comentario; no revocar la excepción ni convertirla en propuesta por ausencia de implementación."
+    },
+    {
+      "id": "retencion-sin-precedencia",
+      "entrada": "El original exige mínimo 30 días; una fuente complementaria exige máximo 7 días. No hay precedencia acordada.",
+      "esperado": "Conservar ambos textos y el conflicto; la política aplicable queda pendiente de decisión sin arbitraje implícito."
+    }
+  ],
+  "preguntas": [
+    {
+      "id": "duda-concreta",
+      "entrada": "La única duda es qué fecha exige E2. Hay veinte historias relacionadas y sus vínculos remotos, sin otra pregunta material.",
+      "esperado": "Investigar E2 con sus fuentes pertinentes y parar con evidencia suficiente o pendiente concreto; no abrir una auditoría general ni consultar los veinte conjuntos de enlaces por defecto."
+    },
+    {
+      "id": "fuentes-comunes-y-decisiva-pendiente",
+      "entrada": "Q-MODAL y Q-HISTORICO comparten original y comentarios. El acuerdo decisivo para HISTORICO no es accesible; Equipo Producto se responsabiliza de recuperarlo.",
+      "esperado": "Agrupar o reutilizar el recorrido común realmente accesible, conservar resultado y pendientes separados y mantener pendiente la recuperación de HISTORICO pese a tener responsable humano."
+    }
+  ]
+}

@@ -49,6 +49,7 @@ const base = { title: "Consulta", created: 1, directory: "proyecto" }
 test("las diez herramientas se registran en V2 y validan permisos e inputs", async () => {
   const { tools, permissions } = await adapter({})
   assert.equal(Object.keys(tools).length, 10)
+  for (const definition of Object.values(tools)) assert.equal(definition.options.codemode, false)
   const context = { sessionID: "s", messageID: "mensaje", id: "call", agent: "planificador" }
   const result = await tools.planning_settings.execute({}, context)
   assert.equal(typeof JSON.parse(result.content).MAX_REFINADORES_PARALELOS, "number")
@@ -155,6 +156,29 @@ test("los ocho agentes conservan sus límites de edición y shell; no se restrin
     ["lector-documentacion", 'markitdown "documento.pdf"'], ["arquitecto-test", "git status --short"]]) {
     await before(agent, "shell", { command })
     await assert.rejects(before(agent, "shell", { command: command + "; npm test" }), /no permitido/)
+  }
+})
+
+test("shell de consulta: metadatos separados con workdir y rechazos con alternativa sin ampliar permisos", async () => {
+  const { before } = await adapter({ code: { ...base, id: "code", agent: "lector-codigo" } })
+  const workdir = "C:\\proyectos preparados\\corpus autorizado"
+  for (const command of ["git branch --show-current", "git rev-parse HEAD", "git status --short --branch",
+    `codegraph status "${workdir}" --json`])
+    await before("code", "shell", { command, workdir })
+  for (const command of ["git status; git rev-parse HEAD", "git status && git rev-parse HEAD",
+    "git status | more", "git status > estado.txt", "git status 2> error.txt", "git status\ngit rev-parse HEAD",
+    "git status `whoami`", "git status $(whoami)", `git -C "${workdir}" status`,
+    "git checkout main", "git reset --hard", "git clean -fd", "git fetch", "git pull", "git branch --show-current --delete main",
+    "git diff --output=diff.txt", "codegraph index", "codegraph query -o salida.txt"]) {
+    await assert.rejects(before("code", "shell", { command, workdir }), (error: Error) => {
+      assert.match(error.message, /no permitido/)
+      assert.match(error.message, /por separado/)
+      assert.match(error.message, /git branch --show-current/)
+      assert.match(error.message, /git rev-parse HEAD/)
+      assert.match(error.message, /git status --short --branch/)
+      assert.match(error.message, /workdir/)
+      return true
+    }, command)
   }
 })
 
