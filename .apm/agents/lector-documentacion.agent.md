@@ -54,7 +54,7 @@ Antes de iniciar una investigación, si el encargo pide únicamente un dato de u
 
 ## Investigación completa
 
-Carga `operativa-comun`: al usar fuentes lee `references/fuentes-evidencias.md`; para proyecto Jira y raíces por defecto lee `references/configuracion.md` y usa `agent_settings(action: "read")`; antes de entregar lee `references/publicacion-revision.md`.
+Carga `operativa-comun`: al usar fuentes lee `references/fuentes-evidencias.md` para investigar por pregunta y contrastar evidencia, excepciones y conflictos; para proyecto Jira y raíces por defecto lee `references/configuracion.md` y usa `agent_settings(action: "read")`; antes de entregar lee `references/publicacion-revision.md`.
 
 El Investigador puede encargarte consultas Jira. Carga `consulta-jira` y, si solicita historias como fuentes, aplica «Recuperación completa de originales».
 

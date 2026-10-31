@@ -95,11 +95,15 @@ export default Plugin.define({
       if (event.tool === "shell") {
         const command = args.command
         if (typeof command !== "string") throw new Error("Comando de shell no permitido para estos agentes")
-        const code = agent === "lector-codigo" && /^(?:codegraph (?:status|query|explore|context|node|callers|callees|files)\b|git (?:status|rev-parse|branch --show-current|log|show|diff|ls-tree|cat-file|blame|grep)\b)/.test(command)
+        const code = agent === "lector-codigo" && (/^(?:codegraph (?:status|query|explore|context|node|callers|callees|files)\b|git (?:status|rev-parse|log|show|diff|ls-tree|cat-file|blame|grep)\b)/.test(command) || command === "git branch --show-current")
         const docs = agent === "lector-documentacion" && /^markitdown (?:--version|--help|"[^"\r\n]+")$/.test(command)
         const test = agent === "arquitecto-test" && /^git (?:status\b|rev-parse\b|branch --show-current$)/.test(command)
-        if (!(code || docs || test) || /[;|&><`$\r\n]|\s(?:--output(?:=|\s)|--exec(?:=|\s)|--git-dir(?:=|\s)|-o(?:\s|$)|-c\s)/i.test(command))
-          throw new Error("Comando de shell no permitido para estos agentes")
+        if (!(code || docs || test) || /[;|&><`$\r\n]|\s(?:--output(?:=|\s)|--exec(?:=|\s)|--git-dir(?:=|\s)|-o(?:\s|$)|-c\s)/i.test(command)) {
+          const help = ["lector-codigo", "arquitecto-test"].includes(agent)
+            ? ' Para metadatos Git, ejecuta por separado "git branch --show-current", "git rev-parse HEAD" y "git status --short --branch", con workdir absoluto del workspace en cada llamada. Conserva solo consultas sin escritura; aumentar el timeout no corrige la forma rechazada.'
+            : agent === "lector-documentacion" ? ' Para convertir, usa markitdown "<ruta absoluta>" con salida estándar, sin redirecciones.' : ""
+          throw new Error("Comando de shell no permitido para estos agentes." + help)
+        }
       }
     })
   },

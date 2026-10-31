@@ -29,8 +29,11 @@ export default Plugin.define({
               messageID: input.messageID ?? "msg_probe", id: "probe", signal: new AbortController().signal,
               progress: async () => {} } as never)
           }
-          return { decisions, ...(result === undefined ? {} : { result }), tools: (await ctx.tool.list()).map(tool => tool.id) }
+          const tools = await ctx.tool.list()
+          return { decisions, ...(result === undefined ? {} : { result }), tools: tools.map(tool => tool.id),
+            codeModeTools: tools.filter(tool => tool.options?.codemode !== false).map(tool => tool.id) }
         } catch (error) {
+          if (input.captureError) return { decisions, error: String(error) }
           return context.error("failed", String(error), { stack: (error as Error).stack })
         } finally { if (!input.sessionID) await ctx.session.remove({ sessionID: session.id }) }
       },

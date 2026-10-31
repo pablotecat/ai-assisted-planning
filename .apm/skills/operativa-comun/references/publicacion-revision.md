@@ -4,6 +4,8 @@
 
 Usa exclusivamente el publicador autorizado por rol y rama:
 
+Si necesitas resolver su interfaz o diagnosticar un impedimento, aplica [herramientas y autorizaciones](configuracion.md#herramientas-y-autorizaciones) antes de atribuir indisponibilidad o fallo.
+
 | Consumidor / rama | Herramienta |
 |---|---|
 | Investigador directo | `write_report_pair` |

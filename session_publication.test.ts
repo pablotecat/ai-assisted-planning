@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import test from "node:test"
@@ -110,6 +110,23 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
     assert.ok(failed.stderr.includes(broken))
     await rm(broken)
     await withServer(root, env, async connected => {
+      // Inspect the installed runtime's registry, not a model's choice of interface.
+      const catalog = probe(root, connected, { agent: "planificador" })
+      for (const name of ["planning_settings", "publish_agent_deliverable", "write_planning_deliverables"]) {
+        assert.ok(catalog.tools.includes(name), name)
+        assert.ok(!catalog.codeModeTools.includes(name), `${name} es directa, fuera de Code Mode`)
+      }
+      const settings = probe(root, connected, { agent: "planificador", tool: "planning_settings", args: {} })
+      assert.equal(typeof JSON.parse(settings.result.content).MAX_REFINADORES_PARALELOS, "number")
+      await assert.rejects(readdir(join(root, "informes-agente", "sesiones")), { code: "ENOENT" },
+        "Consultar catálogo y configuración no intenta publicar")
+      const denied = api("post", "/api/session", root, connected, { agent: "planificador", title: "Denegación real",
+        permissions: [{ action: "planning_settings", resource: "*", effect: "deny" }] }).data
+      const rejection = probe(root, connected, { sessionID: denied.id, agent: "planificador", tool: "planning_settings",
+        args: {}, captureError: true })
+      assert.match(rejection.error, /denied|permission|denegad/i)
+      const roleError = probe(root, connected, { agent: "investigador", tool: "planning_settings", args: {}, captureError: true })
+      assert.match(roleError.error, /Solo planificador/)
       const template = api("post", "/api/session", root, connected, { agent: "planificador", title: "Plantilla" }).data
       async function round(label: string) {
         const ids = Object.fromEntries(["planificador", "investigador", "revisor"].map(agent => [agent, `${template.id}-${label}-${agent}`]))
@@ -132,6 +149,10 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
         return { delivery: await publishAll(call), call }
       }
       const before = await round("antes")
+      const invalid = probe(root, connected, { sessionID: `${template.id}-antes-investigador`,
+        messageID: "msg_antes_investigador", agent: "investigador", tool: "publish_agent_deliverable",
+        args: { nombre: "../nota.md", contenido: "Fuera de alcance" }, captureError: true })
+      assert.match(invalid.error, /Nombre de archivo no permitido/)
       api("post", "/api/location/reload", root, connected, {})
       const after = await round("despues")
       assert.notEqual(after.delivery.sesion, before.delivery.sesion)

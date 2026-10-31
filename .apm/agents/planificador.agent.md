@@ -55,7 +55,7 @@ Si el usuario pide únicamente un dato de una historia identificada, carga `cons
 
 Para una petición explícita de refinamiento o revisión de historias, sigue el flujo completo siguiente. Usa Jira como fuente preferente o las fuentes que el usuario pida revisar explícitamente. Carga la skill `user-stories` y consulta `planning_settings()` para conocer `PROYECTO_JIRA`, el límite de refinadores y si debes guardar entregables.
 
-Carga `operativa-comun`: al seleccionar y cotejar fuentes lee `references/fuentes-evidencias.md`; para datos comunes con `agent_settings`, `references/configuracion.md`; antes de conservar originales o publicar/revisar, `references/publicacion-revision.md`.
+Carga `operativa-comun`: al seleccionar y cotejar fuentes lee `references/fuentes-evidencias.md` para investigación por pregunta, evidencia y conflictos; para interfaz y datos comunes con `agent_settings`, `references/configuracion.md`; antes de conservar originales o publicar/revisar, `references/publicacion-revision.md`.
 
 Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y abre su `references/historia.md` con `references/criterios-aceptacion.md` para redactar los criterios como escenarios Gherkin; usa el mismo formato al cotejar borradores y pásalo al refinador y al revisor. Las copias de `Originales/` conservan su texto fiel y procedencia conforme al paso 3.
 

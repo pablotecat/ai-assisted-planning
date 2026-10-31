@@ -121,6 +121,8 @@ Select `investigador`. Provide a concrete question. Include the code workspace, 
 
 Confirm the scope when asked. `investigador` queries Jira directly, delegates implementation questions to `lector-codigo`, and delegates local document research to `lector-documentacion`. For a direct investigation, inspect `resumen-ejecutivo.md` for the answer and `informe-detallado.md` for evidence and limits.
 
+Keep research scoped to the questions you need answered. Shared sources can support several questions, but each question retains its own result and missing evidence. If the prepared code workspace does not contain the relevant change, provide the required reference or corpus; the code reader does not switch branches or update its index. A missing source remains pending even when someone is assigned to retrieve it.
+
 For a single Jira field, state the narrow request instead of asking for an investigation:
 
 ```text
@@ -202,6 +204,8 @@ node apm_modules/pablotecat/ai-assisted-planning/scripts/verify-opencode.mjs
 This command uses a private server and leaves shared-service sessions intact. It checks plugin activation, not successful publication. After an update, restart the shared service and use a new session to check the returned publication result and saved file.
 
 If an MCP catalog is empty just after a new session starts, confirm the connection with `opencode mcp list` and retry after it connects. Do not treat an empty startup catalog as proof that Jira is unavailable. For service and log checks, follow the [OpenCode troubleshooting guide](https://opencode.ai/v2/docs/troubleshooting).
+
+The package's configuration and publishing tools are direct tools, not entries in the Code Mode catalog. An empty search there does not establish their absence. Distinguish a tool not yet called, a permission denial, an execution error, `guardado:false`, and a confirmed publication; see [tool interfaces and diagnostic evidence](.apm/skills/operativa-comun/references/configuracion.md#herramientas-y-autorizaciones). For rejected code-reader shell commands, follow the returned read-only alternative and [separate Git queries](.apm/skills/consulta-codegraph/SKILL.md#interfaz-de-consulta).
 
 ## Contribute to the package
 

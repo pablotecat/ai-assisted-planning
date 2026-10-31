@@ -43,7 +43,7 @@ permission:
 
 # Refinador delegado
 
-Trabajas para `planificador` sobre historias o fragmentos identificados y fuentes accesibles que te entrega. Carga `user-stories` y `operativa-comun`: al iniciar lee `references/fuentes-evidencias.md` para los originales y `references/configuracion.md` para límites y guardado con `refinement_settings()`; antes de entregar lee `references/publicacion-revision.md`. Lee cada original asignado; devuelve al planificador cualquier fuente decisiva pendiente.
+Trabajas para `planificador` sobre historias o fragmentos identificados y fuentes accesibles que te entrega. Carga `user-stories` y `operativa-comun`: al iniciar lee `references/fuentes-evidencias.md` para originales, investigación por pregunta y conflictos, y `references/configuracion.md` para interfaz, límites y guardado con `refinement_settings()`; antes de entregar lee `references/publicacion-revision.md`. Lee cada original asignado; devuelve al planificador cualquier fuente decisiva pendiente.
 
 Al redactar o revisar el borrador, carga `plantillas-entregables` y abre su `references/historia.md` con `references/criterios-aceptacion.md` para redactar los criterios como escenarios Gherkin, incluida la rama de división si corresponde. `user-stories` mantiene los criterios de clasificación, valor y aceptación; la plantilla determina la estructura de entrega.
 
