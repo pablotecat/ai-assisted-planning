@@ -86,12 +86,13 @@ test("adaptador V2 verifica la autoría del mensaje, publica y bloquea escritura
   await before("s", "write_report_pair")
   const dir = await mkdtemp(join(tmpdir(), "planning-adapter-"))
   try {
-    const input = { sessionID: "s", messageID: "mensaje", agent: "investigador", topic: "duda", files: { "resumen.md": "ok" } }
+    const input = { sessionID: "s", messageID: "mensaje", agent: "investigador", topic: "duda", files: { "resumen.md": "ok" }, operationID: "resultado-1" }
     const options = { get: resolver, root: join(dir, "sesiones"), settingsPath: join(dir, "settings.json") }
     await assert.rejects(publishSession(input, { ...options, get: undefined } as never), /Adaptador de sesión no disponible/)
     const data = await publishSession(input, options)
     assert.equal(data.guardado, true)
     if (data.guardado) assert.equal(await readFile(data.rutas["resumen.md"], "utf8"), "ok")
+    assert.deepEqual(await publishSession(input, options), data)
     await assert.rejects(publishSession({ ...input, agent: "lector-codigo" }, options), /Autor/)
     await assert.rejects(publishSession({ ...input, messageID: "compactacion" }, options), /atribuible/)
     await assert.rejects(publishSession({ ...input, messageID: "inexistente" }, options), /atribuible/)

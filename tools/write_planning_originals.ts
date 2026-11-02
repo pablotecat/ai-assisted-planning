@@ -1,9 +1,10 @@
-import { tool } from "./define_tool.ts"
+import { operationID, tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
   description: "Guarda una copia de los requisitos recibidos en Originales/ antes de delegar; una sola vez por encargo.",
-  args: { historias: tool.schema.array(tool.schema.object({ clave: tool.schema.string(), contenido: tool.schema.string() })).min(1) },
+  args: { operacion_id: operationID,
+    historias: tool.schema.array(tool.schema.object({ clave: tool.schema.string(), contenido: tool.schema.string() })).min(1) },
   async execute(args, context) {
     if (context.agent !== "planificador") throw new Error("Solo planificador puede publicar originales")
     const historias = args.historias.map((item) => ({ ...item, clave: item.clave.trim() }))
@@ -13,6 +14,7 @@ export default tool({
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: historias[0].clave, group: "Originales",
       files: Object.fromEntries(historias.map((item) => [`${item.clave}.md`, item.contenido])),
-      keys: historias.map((item) => item.clave) }, { get: context.resolver }))
+      keys: historias.map((item) => item.clave), operationID: args.operacion_id,
+      publicationType: "write_planning_originals" }, { get: context.resolver }))
   },
 })

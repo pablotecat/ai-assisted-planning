@@ -1,9 +1,10 @@
-import { tool } from "./define_tool.ts"
+import { operationID, tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
   description: "Guarda un entregable propio en la delegación actual. Nombre simple .md, nunca ruta; devuelve guardado:false si está desactivado.",
   args: {
+    operacion_id: operationID,
     nombre: tool.schema.string().describe("Nombre simple terminado en .md"),
     contenido: tool.schema.string().min(1),
     fuentes: tool.schema.array(tool.schema.string()).optional().describe("Fuentes consultadas para el índice de sesión"),
@@ -13,6 +14,7 @@ export default tool({
     if (!["arquitecto", "arquitecto-test", "refinador", "investigador", "lector-codigo", "lector-documentacion"].includes(context.agent)) throw new Error("Agente no autorizado")
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: args.nombre, files: { [args.nombre]: args.contenido },
-      sources: args.fuentes, decisions: args.decisiones }, { get: context.resolver }))
+      sources: args.fuentes, decisions: args.decisiones, operationID: args.operacion_id,
+      publicationType: "publish_agent_deliverable" }, { get: context.resolver }))
   },
 })

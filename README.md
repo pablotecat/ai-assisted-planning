@@ -154,6 +154,20 @@ Consult the source for the output you need to check:
 
 Use `domain-glossary` and `meeting-coach` with a host agent that has the required tools and write permissions. Loading a skill does not add permissions to this package's restricted agents.
 
+### Retry or correct a publication
+
+All five publishers accept an optional `operacion_id`. Updated agent flows assign it **before the first call** and retain it with the complete request in continuations and handoffs. Retry the same ID and request after an interruption or lost response, including after a location reload. The key is scoped to the verified root session, publishing session, and publisher type; it neither supplies identity nor grants access. Different content or metadata under that key is rejected. A deliberate producer correction uses a new ID and a complete new delivery. Planner originals remain publish-once; a new ID does not authorize overwriting reviewer reports either.
+
+A confirmed result retains `guardado`, `rutas`, and `sesion`, and adds `operacion_id`, `artefacto_id`, and `hash_manifiesto`. The manifest hashes exact UTF-8 bytes and sorted session-relative file paths; registered reviewer reports are separate artifacts and do not alter the producer's hash. Verification detects changed producer bytes and unregistered files in a delivery directory. These records prove publication, not semantic approval. See the [publication and review rules](.apm/skills/operativa-comun/references/publicacion-revision.md) for the agent workflow.
+
+If `indice.actualizado` is `false`, the delivery is already confirmed: retain it and retry the same operation to repair the index. A partial folder is not a confirmed delivery. Recovery reconciles prepared files under the session lock using file identity and hashes, not equal content alone. It requires hard links and verifiable filesystem identities on the same volume. Ambiguous ownership, including an interruption between creating a directory and saving its identity, produces an impediment rather than adopting or deleting it. An unfinished reservation must be resolved before a different operation can publish in that root.
+
+Old literal calls remain valid. Without an ID each invocation remains a new attempt; the generated ID can be reused **if its response was received**, but cannot guarantee recovery of a lost response. With saving disabled the result remains exactly `guardado:false`, without new paths, control records, or recovery files. Existing files and narrative reviews remain unchanged and do not acquire inferred assignment IDs or approvals.
+
+The first extension of a legacy `.control/<root-id>/state.json` preserves its exact bytes in `state.v0.json`; new control uses `schemaVersion: 1`, `artifacts`, and `operations` alongside the existing fields. Unknown versions are rejected without rewriting them. Keep the full control directory and its prepared payloads when backing up. Locks record host, PID, and a unique token: automatic recovery requires the same host and a demonstrably absent process; active, inaccessible, foreign-host, or unidentified owners are not removed by age. Recovered lock descriptors are retained for diagnosis. If recovery itself is interrupted or ownership cannot be proven, resolve it manually with assignments stopped rather than deleting locks blindly.
+
+For rollback, finish or stop consumer assignments, retain a separate copy of the new control and **all** deliverables, and restore the previous package with its compatible control backup. Never run an old publisher against new control or delete new deliveries to make rollback fit. Deliveries created after the backup require manual reconciliation; the backup does not contain their records.
+
 <a id="mapa-normativo-compartido"></a>
 
 ## Consult the shared rules

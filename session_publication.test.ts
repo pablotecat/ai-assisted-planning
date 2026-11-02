@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import test from "node:test"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import { api, opencode, probe, probePlugin, withServer } from "./test-support/opencode.mjs"
 
@@ -47,11 +48,17 @@ async function fixture(installed = false) {
   return { root, config, env }
 }
 
-async function publishAll(call: (agent: string, tool: string, args: object) => Promise<any>) {
+type PublicationCall = { agent: string; tool: string; args: any; result: any }
+async function publishAll(call: (agent: string, tool: string, args: object) => Promise<any>, operations?: PublicationCall[]) {
   const check = async (agent: string, tool: string, args: object, name: string, content: string) => {
-    const result = await call(agent, tool, args)
+    const request = operations ? { ...args, operacion_id: `${tool}-1` } : args
+    const result = await call(agent, tool, request)
     assert.equal(result.guardado, true, JSON.stringify(result))
     assert.equal(await readFile(result.rutas[name], "utf8"), content)
+    if (operations) {
+      operations.push({ agent, tool, args: request, result })
+      assert.deepEqual(await call(agent, tool, request), result)
+    }
     return result
   }
   await check("investigador", "publish_agent_deliverable", { nombre: "nota.md", contenido: "Nota" }, "nota.md", "Nota")
@@ -69,13 +76,14 @@ test("los cinco publicadores conservan su resolvedor aunque se inicialice otra i
   const { root, config } = await fixture()
   try {
     const { default: plugin } = await import(pathToFileURL(join(config, "plugins", "agent-session.ts")).href)
+    const resolved: string[] = []
     async function setup(title: string) {
       const tools: Record<string, any> = {}
       await plugin.setup({
         session: {
-          get: async ({ sessionID }: any) => ({ id: sessionID, agent: sessionID,
+          get: async ({ sessionID }: any) => { resolved.push(title); return { id: sessionID, agent: sessionID,
             parentID: sessionID === "revisor" ? "planificador" : undefined, title,
-            time: { created: 1 }, location: { directory: root } }),
+            time: { created: 1 }, location: { directory: root } } },
           context: async ({ sessionID }: any) => [{ id: "mensaje", type: "assistant", agent: sessionID }],
           hook: async () => {},
         },
@@ -88,8 +96,15 @@ test("los cinco publicadores conservan su resolvedor aunque se inicialice otra i
     }
     const first = await setup("Primera instancia")
     await setup("Segunda instancia")
-    const delivery = await publishAll(first)
+    const operations: PublicationCall[] = []
+    const delivery = await publishAll(first, operations)
     assert.match(delivery.sesion, /primera-instancia$/)
+    await setup("Tercera instancia")
+    const count = resolved.length
+    for (const operation of operations)
+      assert.deepEqual(await first(operation.agent, operation.tool, operation.args), operation.result)
+    assert.ok(resolved.length > count, "la recuperación vuelve a resolver identidad por runtime")
+    assert.ok(resolved.every(title => title === "Primera instancia"))
     await assert.rejects(first("build", "write_report_pair", { slug: "consulta", resumen_ejecutivo: "Resumen",
       informe_detallado: "Detalle" }), /Solo investigador/)
   } finally { await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
@@ -128,7 +143,7 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
       const roleError = probe(root, connected, { agent: "investigador", tool: "planning_settings", args: {}, captureError: true })
       assert.match(roleError.error, /Solo planificador/)
       const template = api("post", "/api/session", root, connected, { agent: "planificador", title: "Plantilla" }).data
-      async function round(label: string) {
+      async function round(label: string, operations?: PublicationCall[]) {
         const ids = Object.fromEntries(["planificador", "investigador", "revisor"].map(agent => [agent, `${template.id}-${label}-${agent}`]))
         for (const agent of ["planificador", "investigador", "revisor"]) {
           // Import a real, attributed assistant message without contacting a model provider.
@@ -137,25 +152,80 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
               ...(agent === "revisor" ? { parentID: ids.planificador } : {}) },
             messages: [{ id: `msg_user_${label}_${agent}`, type: "user", time: { created: template.time.created }, text: "Publica" },
               { id: `msg_${label}_${agent}`, type: "assistant", agent, time: { created: template.time.created + 1, completed: template.time.created + 2 },
-                model: { providerID: "fixture", id: "fixture" }, finish: "stop", content: [{ type: "text", text: "Publicación de prueba" }] }],
+                model: { providerID: "fixture", id: "fixture" }, finish: "stop", content: [{ type: "text", text: "Publicación de prueba" }] },
+              { id: `msg_retry_${label}_${agent}`, type: "assistant", agent, time: { created: template.time.created + 3, completed: template.time.created + 4 },
+                model: { providerID: "fixture", id: "fixture" }, finish: "stop", content: [{ type: "text", text: "Continuación sintética" }] }],
           })
           const context = api("get", `/api/session/${ids[agent]}/context`, root, connected)
           assert.ok(JSON.stringify(context).includes(`msg_${label}_${agent}`), JSON.stringify(context))
         }
-        const call = async (agent: string, tool: string, args: object) => {
-          const result = probe(root, connected, { sessionID: ids[agent], messageID: `msg_${label}_${agent}`, agent, tool, args })
+        const call = async (agent: string, tool: string, args: object, retry = false) => {
+          const result = probe(root, connected, { sessionID: ids[agent], messageID: `msg_${retry ? "retry_" : ""}${label}_${agent}`, agent, tool, args })
           return JSON.parse(result.result.content)
         }
-        return { delivery: await publishAll(call), call }
+        return { delivery: await publishAll(call, operations), call, ids }
       }
       const before = await round("antes")
       const invalid = probe(root, connected, { sessionID: `${template.id}-antes-investigador`,
         messageID: "msg_antes_investigador", agent: "investigador", tool: "publish_agent_deliverable",
         args: { nombre: "../nota.md", contenido: "Fuera de alcance" }, captureError: true })
       assert.match(invalid.error, /Nombre de archivo no permitido/)
+      const operations: PublicationCall[] = []
+      const stable = await round("idempotente", operations)
+      assert.equal(operations.length, 5)
+      const snapshots = new Map<string, Buffer>()
+      for (const operation of operations) for (const path of Object.values<string>(operation.result.rutas))
+        snapshots.set(path, await readFile(path))
+      // Simulate a lost response: deliberately discard a successful native result,
+      // then retry from another attributed assistant message before and after reload.
+      for (const operation of operations) {
+        await stable.call(operation.agent, operation.tool, operation.args)
+        assert.deepEqual(await stable.call(operation.agent, operation.tool, operation.args, true), operation.result)
+      }
+      const deliveryCall = operations.find(operation => operation.tool === "write_planning_deliverables")!
+      const conflict = probe(root, connected, { sessionID: stable.ids.planificador, messageID: "msg_idempotente_planificador", agent: "planificador",
+        tool: deliveryCall.tool, args: { ...deliveryCall.args, incidencias_globales: "Cambio con clave reutilizada" }, captureError: true })
+      assert.match(conflict.error, /contenido distinto/)
       api("post", "/api/location/reload", root, connected, {})
       const after = await round("despues")
       assert.notEqual(after.delivery.sesion, before.delivery.sesion)
+      for (const operation of operations) {
+        assert.deepEqual(await stable.call(operation.agent, operation.tool, operation.args, true), operation.result)
+        const stateID = createHash("sha256").update(root + "\0" + (operation.agent === "investigador" ? stable.ids.investigador : stable.ids.planificador)).digest("hex")
+        const state = JSON.parse(await readFile(join(root, "informes-agente", "sesiones", ".control", stateID, "state.json"), "utf8"))
+        const artifact = state.artifacts[operation.result.artefacto_id]
+        assert.equal(createHash("sha256").update(JSON.stringify(artifact.files)).digest("hex"), operation.result.hash_manifiesto)
+        for (const file of artifact.files) {
+          const bytes = await readFile(join(operation.result.sesion, file.path))
+          assert.equal(createHash("sha256").update(bytes).digest("hex"), file.sha256)
+          assert.equal(bytes.length, file.bytes)
+        }
+      }
+      const unattributed = probe(root, connected, { sessionID: stable.ids.planificador, messageID: "msg_user_idempotente_planificador",
+        agent: "planificador", tool: deliveryCall.tool, args: deliveryCall.args, captureError: true })
+      assert.match(unattributed.error, /atribuible/)
+      const correction = await stable.call("planificador", deliveryCall.tool, { ...deliveryCall.args, operacion_id: "correccion-1",
+        historias: [{ clave: "APP-1", contenido: "Corrección completa", incidencias: "Ninguna" }] }, true)
+      assert.notEqual(correction.artefacto_id, deliveryCall.result.artefacto_id)
+      assert.match(correction.rutas["APP-1.md"], /entrega-02/)
+      assert.equal(await readFile(correction.rutas["APP-1-incidencias.md"], "utf8"), "Ninguna")
+      for (const [path, bytes] of snapshots) assert.deepEqual(await readFile(path), bytes)
+
+      const settingsPath = join(config, "agent-settings.json")
+      const savedSettings = JSON.parse(await readFile(settingsPath, "utf8"))
+      const disabled = structuredClone(savedSettings)
+      for (const agent of ["investigador", "planificador", "revisor"]) disabled.agentes[agent].guardarEntregablesEnSesion = false
+      await writeFile(settingsPath, JSON.stringify(disabled))
+      const controlRoot = join(root, "informes-agente", "sesiones", ".control")
+      const controls = await Promise.all((await readdir(controlRoot)).map(async name => ({ path: join(controlRoot, name, "state.json"),
+        content: await readFile(join(controlRoot, name, "state.json")) })))
+      for (const reload of [false, true]) {
+        if (reload) api("post", "/api/location/reload", root, connected, {})
+        for (const operation of operations)
+          assert.deepEqual(await stable.call(operation.agent, operation.tool, operation.args, true), { guardado: false })
+        for (const control of controls) assert.deepEqual(await readFile(control.path), control.content)
+      }
+      await writeFile(settingsPath, JSON.stringify(savedSettings))
       const continued = await before.call("investigador", "publish_agent_deliverable", { nombre: "nota.md", contenido: "Tras recarga" })
       assert.equal(continued.guardado, true)
       assert.equal(await readFile(continued.rutas["nota.md"], "utf8"), "Tras recarga")

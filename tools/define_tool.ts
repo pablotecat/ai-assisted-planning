@@ -12,3 +12,6 @@ export function tool<Args extends legacyTool.schema.ZodRawShape>(definition: {
   return definition
 }
 tool.schema = legacyTool.schema
+
+export const operationID = tool.schema.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/).optional()
+  .describe("Identidad lógica estable: conserva el mismo valor y petición al reintentar; usa otro para una corrección deliberada")

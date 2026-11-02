@@ -1,9 +1,10 @@
-import { tool } from "./define_tool.ts"
+import { operationID, tool } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
   description: "Publica historias e incidencias juntas en la carpeta del planificador; devuelve guardado:false si está desactivado.",
   args: {
+    operacion_id: operationID,
     historias: tool.schema.array(tool.schema.object({
       clave: tool.schema.string(), contenido: tool.schema.string(), incidencias: tool.schema.string(),
     })).min(1),
@@ -23,6 +24,7 @@ export default tool({
     files["incidencias-globales.md"] = args.incidencias_globales
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: historias[0].clave, group: "entrega", files,
-      keys: historias.map((item) => item.clave), sources: args.fuentes, decisions: args.decisiones }, { get: context.resolver }))
+      keys: historias.map((item) => item.clave), sources: args.fuentes, decisions: args.decisiones,
+      operationID: args.operacion_id, publicationType: "write_planning_deliverables" }, { get: context.resolver }))
   },
 })
