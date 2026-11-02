@@ -17,6 +17,9 @@ async function fixture(installed = false) {
   const root = await mkdtemp(join(parent, "publication-"))
   const config = join(root, ".opencode")
   await mkdir(config)
+  await mkdir(join(config, "agents"))
+  for (const name of ["planificador", "refinador", "investigador", "lector-codigo", "lector-documentacion", "arquitecto", "arquitecto-test", "revisor"])
+    await cp(join(source, ".apm", "agents", `${name}.agent.md`), join(config, "agents", `${name}.md`))
   await cp(join(source, "plugin"), join(config, "plugins"), { recursive: true })
   await cp(join(source, "tools"), join(config, "tools"), { recursive: true })
   for (const name of ["agent-settings.example.json", "package.json"])
@@ -99,10 +102,13 @@ test("los cinco publicadores conservan su resolvedor aunque se inicialice otra i
     const operations: PublicationCall[] = []
     const delivery = await publishAll(first, operations)
     assert.match(delivery.sesion, /primera-instancia$/)
+    const work = (await first("investigador", "session_work", { action: "create", pregunta: "Recuperar", criterios: [], corpus: "fixture", referencia: "v1" })).encargo
+    const note = await first("investigador", "publish_agent_deliverable", { encargo_id: work.id, nombre: "nota.md", contenido: "Recuperable", operacion_id: "s06-note" })
     await setup("Tercera instancia")
     const count = resolved.length
     for (const operation of operations)
       assert.deepEqual(await first(operation.agent, operation.tool, operation.args), operation.result)
+    assert.equal((await first("investigador", "session_artifacts", { action: "list", encargo_id: work.id, corpus: "fixture", referencia: "v1" })).artefactos[0].id, note.artefacto_id)
     assert.ok(resolved.length > count, "la recuperación vuelve a resolver identidad por runtime")
     assert.ok(resolved.every(title => title === "Primera instancia"))
     await assert.rejects(first("build", "write_report_pair", { slug: "consulta", resumen_ejecutivo: "Resumen",
@@ -140,7 +146,12 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
       const rejection = probe(root, connected, { sessionID: denied.id, agent: "planificador", tool: "planning_settings",
         args: {}, captureError: true })
       assert.match(rejection.error, /denied|permission|denegad/i)
-      const roleError = probe(root, connected, { agent: "investigador", tool: "planning_settings", args: {}, captureError: true })
+      const deniedRole = probe(root, connected, { agent: "investigador", tool: "planning_settings", args: {}, captureError: true })
+      assert.match(deniedRole.error, /Permission denied: planning_settings/)
+      // Exercise the independent runtime role guard too, even if a consumer grants the tool.
+      const grantedWrongRole = api("post", "/api/session", root, connected, { agent: "investigador", title: "Validación de rol",
+        permissions: [{ action: "planning_settings", resource: "*", effect: "allow" }] }).data
+      const roleError = probe(root, connected, { sessionID: grantedWrongRole.id, agent: "investigador", tool: "planning_settings", args: {}, captureError: true })
       assert.match(roleError.error, /Solo planificador/)
       const template = api("post", "/api/session", root, connected, { agent: "planificador", title: "Plantilla" }).data
       async function round(label: string, operations?: PublicationCall[]) {
@@ -231,6 +242,62 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
         tracked?.push(...calls)
       }
       await s05Round(stable, "antes", operations)
+      // S06 uses a separate native tree; no work/corpus is inferred for the S04/S05 calls above.
+      const recoveryIDs: Record<string, string> = {}
+      for (const [id, agent, parent] of [["plan", "planificador"], ["ref", "refinador", "plan"], ["research", "investigador", "ref"],
+        ["replacement", "investigador", "ref"], ["sibling", "refinador", "plan"], ["review", "revisor", "research"],
+        ["code", "lector-codigo", "research"]]) {
+        recoveryIDs[id] = `${template.id}-s06-${id}`
+        api("post", "/api/experimental/session/import", root, connected, {
+          info: { ...template, id: recoveryIDs[id], agent, title: `S06 ${id}`, ...(parent ? { parentID: recoveryIDs[parent] } : {}) },
+          messages: [{ id: `msg_s06_${id}`, type: "assistant", agent, time: { created: template.time.created + 1, completed: template.time.created + 2 },
+            model: { providerID: "fixture", id: "fixture" }, finish: "stop", content: [{ type: "text", text: "Resultado sintético S06" }] }],
+        })
+      }
+      const recoveryCall = (id: string, agent: string, tool: string, args: object, captureError = false) => {
+        const response = probe(root, connected, { sessionID: recoveryIDs[id], messageID: `msg_s06_${id}`, agent, tool, args, captureError })
+        return captureError ? response : JSON.parse(response.result.content)
+      }
+      const createArgs = { action: "create", pregunta: "CA-1 y CA-2", criterios: ["CA-1", "CA-2"], corpus: "fixture-S06", referencia: "v1" }
+      const ownWork = recoveryCall("ref", "refinador", "session_work", createArgs).encargo
+      const work = recoveryCall("ref", "refinador", "session_work", { ...createArgs,
+        padre_id: ownWork.id, responsable_session_id: recoveryIDs.research }).encargo
+      const readerWork = recoveryCall("research", "investigador", "session_work", { ...createArgs,
+        padre_id: work.id, responsable_session_id: recoveryIDs.code }).encargo
+      const readerResult = recoveryCall("code", "lector-codigo", "publish_agent_deliverable", { encargo_id: readerWork.id,
+        operacion_id: "s06-reader", nombre: "investigacion.md", contenido: "Conclusión del lector, no código crudo" })
+      assert.match(work.id, /^work-/)
+      assert.notEqual(work.id, recoveryIDs.research)
+      const publicationArgs = { encargo_id: work.id, operacion_id: "s06-result", nombre: "conclusion.md", contenido: "CA-1 íntegro 😀\r\nCA-2 pendiente",
+        fuentes: ["APP-1"], decisiones: ["No inferir CA-2"] }
+      recoveryCall("research", "investigador", "publish_agent_deliverable", publicationArgs) // Discard the successful reply.
+      recoveryCall("research", "investigador", "session_work", { action: "record", encargo_id: work.id, resultado: "CA-1 verificado", suficiencia: "parcial",
+        pendientes: ["CA-2"], siguiente_accion: "Lector de CA-2", fuentes: ["APP-1"], decisiones: ["No inferir CA-2"],
+        historial_revision: { intentos_consumidos: 2, limite: 3, referencias: ["informe-sintético"] } })
+      const inventoryArgs = { action: "list", encargo_id: work.id, corpus: "fixture-S06", referencia: "v1" }
+      const recoveryInventory = recoveryCall("ref", "refinador", "session_artifacts", inventoryArgs)
+      const recoveredArtifact = recoveryInventory.artefactos[0]
+      assert.equal(recoveredArtifact.operacion_id, "s06-result")
+      assert.equal(recoveredArtifact.producerSessionID, recoveryIDs.research)
+      assert.deepEqual(recoveredArtifact.fuentes, publicationArgs.fuentes)
+      assert.match(recoveryCall("sibling", "refinador", "session_artifacts", inventoryArgs, true).error, /no asignado/)
+      assert.match(recoveryCall("research", "investigador", "session_artifacts", { ...inventoryArgs, corpus: "otro" }, true).error, /Corpus/)
+      assert.match(recoveryCall("research", "investigador", "session_artifacts", { ...inventoryArgs, path: root }, true).error, /Unrecognized/)
+      const readArgs = { ...inventoryArgs, action: "read", artefacto_id: recoveredArtifact.id, archivo: recoveredArtifact.files[0].path, limite: 7 }
+      const readRecovery = (id: string, agent: string) => {
+        let content = "", cursor: string | null = null
+        do {
+          const page = recoveryCall(id, agent, "session_artifacts", { ...readArgs, ...(cursor ? { cursor } : {}) })
+          content += page.contenido
+          cursor = page.cursor
+        } while (cursor)
+        assert.equal(content, publicationArgs.contenido)
+      }
+      readRecovery("ref", "refinador")
+      const deniedWork = api("post", "/api/session", root, connected, { agent: "investigador", title: "S06 denegada",
+        permissions: [{ action: "session_work", resource: "*", effect: "deny" }] }).data
+      assert.match(probe(root, connected, { sessionID: deniedWork.id, agent: "investigador", tool: "session_work",
+        args: { action: "list" }, captureError: true }).error, /denied|permission|denegad/i)
       const snapshots = new Map<string, Buffer>()
       for (const operation of operations) for (const path of Object.values<string>(operation.result.rutas))
         snapshots.set(path, await readFile(path))
@@ -245,6 +312,17 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
         tool: deliveryCall.tool, args: { ...deliveryCall.args, incidencias_globales: "Cambio con clave reutilizada" }, captureError: true })
       assert.match(conflict.error, /contenido distinto/)
       api("post", "/api/location/reload", root, connected, {})
+      assert.deepEqual(recoveryCall("ref", "refinador", "session_artifacts", inventoryArgs), recoveryInventory)
+      readRecovery("ref", "refinador")
+      recoveryCall("ref", "refinador", "session_work", { action: "assign", encargo_id: work.id, responsable_session_id: recoveryIDs.replacement })
+      const recoveredWork = recoveryCall("replacement", "investigador", "session_work", { action: "get", encargo_id: work.id }).encargo
+      assert.equal(recoveredWork.events[1].historial_revision.intentos_consumidos, 2)
+      assert.deepEqual(recoveredWork.events[1].pendientes, ["CA-2"])
+      readRecovery("replacement", "investigador")
+      assert.equal(recoveryCall("replacement", "investigador", "session_artifacts", inventoryArgs).artefactos[0].producerSessionID, recoveryIDs.research)
+      const readerInventory = recoveryCall("replacement", "investigador", "session_artifacts", { ...inventoryArgs, encargo_id: readerWork.id })
+      assert.equal(readerInventory.artefactos[0].id, readerResult.artefacto_id)
+      assert.equal(readerInventory.artefactos[0].producerSessionID, recoveryIDs.code)
       const after = await round("despues")
       assert.notEqual(after.delivery.sesion, before.delivery.sesion)
       await s05Round(after, "despues")
@@ -282,6 +360,10 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
         if (reload) api("post", "/api/location/reload", root, connected, {})
         for (const operation of operations)
           assert.deepEqual(await stable.call(operation.agent, operation.tool, operation.args, true), { guardado: false })
+        for (const control of controls) assert.deepEqual(await readFile(control.path), control.content)
+        assert.deepEqual(recoveryCall("replacement", "investigador", "session_work", { action: "record", encargo_id: work.id,
+          resultado: "Parcial sin guardar", suficiencia: "parcial", pendientes: ["CA-2"], siguiente_accion: "Conservar contexto", fuentes: [], decisiones: [] }), { guardado: false })
+        readRecovery("replacement", "investigador")
         for (const control of controls) assert.deepEqual(await readFile(control.path), control.content)
       }
       await writeFile(settingsPath, JSON.stringify(savedSettings))

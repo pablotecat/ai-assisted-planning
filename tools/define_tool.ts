@@ -16,6 +16,9 @@ tool.schema = legacyTool.schema
 export const operationID = tool.schema.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/).optional()
   .describe("Identidad lógica estable: conserva el mismo valor y petición al reintentar; usa otro para una corrección deliberada")
 
+export const workID = tool.schema.string().min(1).optional()
+  .describe("ID local de session_work; vincula esta publicación al encargo/corpus asignado. No es un ID de OpenCode")
+
 export const fileOrigin = tool.schema.object({
   artefacto_id: tool.schema.string().min(1),
   archivo: tool.schema.string().min(1).describe("Ruta relativa exacta del archivo en el manifiesto registrado; nunca ruta arbitraria"),

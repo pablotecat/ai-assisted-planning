@@ -15,6 +15,8 @@ permission:
     "*": deny
     revisor: allow
   publish_agent_deliverable: allow
+  session_work: allow
+  session_artifacts: allow
   bash:
     "*": deny
     "git status": allow

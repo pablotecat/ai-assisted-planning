@@ -1,10 +1,11 @@
-import { fileInput, fileOrigin, operationID, tool } from "./define_tool.ts"
+import { fileInput, fileOrigin, operationID, tool, workID } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
   description: "Publica resumen ejecutivo e informe detallado juntos: literal u origen registrado por archivo, exclusivamente uno; devuelve guardado:false si está desactivado.",
   args: {
     operacion_id: operationID,
+    encargo_id: workID,
     slug: tool.schema.string().describe("Tema breve de la consulta; nunca es una ruta"),
     resumen_ejecutivo: tool.schema.string().min(1).optional(),
     origen_resumen_ejecutivo: fileOrigin.optional(),
@@ -19,6 +20,6 @@ export default tool({
       agent: context.agent, topic: args.slug, group: "consulta", sources: args.fuentes, decisions: args.decisiones,
       files: { "resumen-ejecutivo.md": fileInput(args.resumen_ejecutivo, args.origen_resumen_ejecutivo),
         "informe-detallado.md": fileInput(args.informe_detallado, args.origen_informe_detallado) },
-      operationID: args.operacion_id, publicationType: "write_report_pair" }, { get: context.resolver }))
+      operationID: args.operacion_id, publicationType: "write_report_pair", workID: args.encargo_id }, { get: context.resolver }))
   },
 })

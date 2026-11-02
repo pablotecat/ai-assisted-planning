@@ -3,6 +3,7 @@ import { link, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile 
 import { hostname } from "node:os"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { readAgentSettings, sessionRoot, type AgentName } from "./agent_settings.ts"
+import { artifactRequest, workRequest, type ArtifactRequest, type WorkRequest } from "./work_contract.ts"
 
 export type Identity = { id: string; parentID?: string; agent: string; title: string; created: number; directory: string }
 export type Resolver = (id: string, messageID?: string) => Promise<Identity>
@@ -33,8 +34,16 @@ type Version = { producerSessionID: string; type: string; published: string; rev
 export type Artifact = {
   id: string; rootSessionID: string; producerSessionID: string; agent: string; type: string;
   files: ManifestFile[]; manifestHash: string; deliveries: string[]; directory?: string;
+  workID?: string;
   previous?: string; origin: { type: "literal" | "promotion"; delivery?: string; files?: Record<string, FileOrigin> }
 }
+type WorkEvent = { sessionID: string; messageID?: string; action: string; responsibleSessionID?: string;
+  suficiencia?: "parcial" | "completo";
+  resultado?: string; pendientes?: string[]; siguiente_accion?: string; fuentes?: string[]; decisiones?: string[];
+  artefacto_id?: string; historial_revision?: { intentos_consumidos: number; limite: number; referencias: string[] } }
+export type Work = { id: string; rootSessionID: string; ownerSessionID: string; responsibleSessionID: string;
+  parentID?: string; pregunta: string; criterios: string[]; corpus: string; referencia: string;
+  assignments: string[]; agents: Record<string, string>; events: WorkEvent[]; reviews: { sessionID: string; artifactID: string }[] }
 type Saved = { guardado: true; rutas: Record<string, string>; sesion: string;
   artefacto_id: string; hash_manifiesto: string; operacion_id: string; archivos?: ManifestFile[] }
 type Operation = {
@@ -46,7 +55,7 @@ type Operation = {
 type State = { root: string; entries: Record<string, Entry>; deliveries: string[]; sources: string[];
   decisions: string[]; keys: string[]; schemaVersion: 1;
   artifacts: Record<string, Artifact>; operations: Record<string, Operation>;
-  reviews: Record<string, Review>; versions: Record<string, Version> }
+  reviews: Record<string, Review>; versions: Record<string, Version>; work: Record<string, Work> }
 type Options = { get: Resolver; root?: string; settingsPath?: string;
   // Internal fault seam, never exposed in a tool's schema.
   checkpoint?: (phase: string) => void | Promise<void> }
@@ -213,14 +222,14 @@ async function replaceFile(source: string, destination: string) {
   }
 }
 
-async function loadState(stateDir: string): Promise<State> {
+async function loadState(stateDir: string, migrate = true): Promise<State> {
   const path = join(stateDir, "state.json")
   if ((await lstat(path)).isSymbolicLink()) throw new Error("Estado de sesión enlazado")
   const raw = await readFile(path)
   const state = JSON.parse(raw.toString("utf8"))
   if (state.schemaVersion !== undefined && state.schemaVersion !== 1)
     throw new Error(`Versión de control no soportada: ${state.schemaVersion}; conserva el control y usa una versión compatible`)
-  if (state.schemaVersion === undefined) {
+  if (state.schemaVersion === undefined && migrate) {
     const backup = join(stateDir, "state.v0.json")
     try { await writeFile(backup, raw, { flag: "wx" }) } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
@@ -231,7 +240,7 @@ async function loadState(stateDir: string): Promise<State> {
   if (typeof state.root !== "string" || basename(state.root) !== state.root || ["", ".", ".."].includes(state.root) ||
       !state.entries || !Array.isArray(state.deliveries)) throw new Error("Raíz de sesión inválida")
   return { ...state, schemaVersion: 1, sources: state.sources ?? [], decisions: state.decisions ?? [], keys: state.keys ?? [],
-    artifacts: state.artifacts ?? {}, operations: state.operations ?? {}, reviews: state.reviews ?? {}, versions: state.versions ?? {} }
+    artifacts: state.artifacts ?? {}, operations: state.operations ?? {}, reviews: state.reviews ?? {}, versions: state.versions ?? {}, work: state.work ?? {} }
 }
 
 async function sessionDirectory(root: string, state: State) {
@@ -240,6 +249,35 @@ async function sessionDirectory(root: string, state: State) {
   await checkExistingAncestors(path)
   await directory(path)
   return path
+}
+
+async function stateLocation(nodes: Identity[], options: Options, create: boolean) {
+  const settings = await readAgentSettings(options.settingsPath)
+  const root = options.root ?? sessionRoot(settings)
+  const id = hash(nodes[0].directory + "\0" + nodes[0].id)
+  const stateDir = join(root, ".control", id)
+  await checkExistingAncestors(stateDir)
+  if (create) await mkdir(stateDir, { recursive: true })
+  await directory(stateDir)
+  return { root, stateDir }
+}
+
+async function loadOrCreateState(root: string, stateDir: string, node: Identity, topic: string) {
+  try { return await loadState(stateDir) } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+  }
+  const name = rootName(node.created, agentNames[node.agent], node.title || topic)
+  let rootFolder = name
+  for (let n = 1; ; n++) {
+    try { await mkdir(join(root, rootFolder)); break } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+      rootFolder = `${name}-${String(n + 1).padStart(2, "0")}`
+    }
+  }
+  const state: State = { root: rootFolder, entries: {}, deliveries: [], sources: [], decisions: [], keys: [], schemaVersion: 1,
+    artifacts: {}, operations: {}, reviews: {}, versions: {}, work: {} }
+  await saveJson(join(stateDir, "state.json"), state)
+  return state
 }
 
 async function checkedFile(root: string, path: string) {
@@ -368,7 +406,7 @@ function operationKey(sessionID: string, type: string, logicalID: string) {
 }
 
 type Request = { sessionID: string; operationID: string; type: string; agent: string; topic: string;
-  files: Record<string, FileInput>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string; verdict?: Verdict }
+  files: Record<string, FileInput>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string; verdict?: Verdict; workID?: string }
 
 async function resolveFiles(input: Request, state: State, sessionDir: string, nodes: Identity[], options: Options) {
   const files: Record<string, string | Uint8Array> = {}
@@ -377,6 +415,11 @@ async function resolveFiles(input: Request, state: State, sessionDir: string, no
     const artifact = state.artifacts[origin.artefacto_id]
     if (!artifact || artifact.rootSessionID !== nodes[0].id || artifact.agent === "revisor")
       throw new Error("Artefacto de origen ajeno o no autorizado")
+    if (input.workID || artifact.workID) {
+      const work = state.work[input.workID ?? ""]
+      if (!work || artifact.workID !== work.id || !await canReadArtifact(artifact, work, nodes, state, options))
+        throw new Error("Origen de otro encargo/corpus o no asignado")
+    }
     const sourceNodes = await chain(artifact.producerSessionID, undefined, options.get)
     const source = sourceNodes.at(-1)!
     if (sourceNodes[0].id !== nodes[0].id || source.directory !== nodes[0].directory || source.agent !== artifact.agent ||
@@ -408,7 +451,7 @@ function requestDigest(input: Request) {
     files: Object.keys(input.files).sort().map(name => { const file = input.files[name]; return [name,
       typeof file === "string" ? file : { artefacto_id: file.artefacto_id, archivo: file.archivo, sha256: file.sha256 }] }),
     sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [],
-    ...(input.verdict ? { verdict: input.verdict } : {}) }))
+    ...(input.verdict ? { verdict: input.verdict } : {}), ...(input.workID ? { workID: input.workID } : {}) }))
 }
 
 async function prepare(state: State, stateDir: string, sessionDir: string, nodes: Identity[], input: Request, key: string,
@@ -419,10 +462,11 @@ async function prepare(state: State, stateDir: string, sessionDir: string, nodes
   await mkdir(stage)
   const content = Object.fromEntries(Object.entries(paths).map(([name, path]) => [portable(relative(sessionDir, path)), files[name]]))
   const identity = manifest(content)
-  const previous = Object.values(state.artifacts).findLast(a => a.producerSessionID === input.sessionID && a.type === input.type)
+  const previous = Object.values(state.artifacts).findLast(a => a.producerSessionID === input.sessionID && a.type === input.type && a.workID === input.workID)
   const origins = Object.fromEntries(Object.entries(input.files).filter((entry): entry is [string, FileOrigin] => typeof entry[1] !== "string"))
   const artifact: Artifact = { id: randomUUID(), rootSessionID: nodes[0].id, producerSessionID: input.sessionID,
     agent: input.agent, type: input.type, files: identity.files, manifestHash: identity.hash, deliveries,
+    ...(input.workID ? { workID: input.workID } : {}),
     ...(targetDirectory ? { directory: portable(relative(sessionDir, targetDirectory)) } : {}),
     ...(previous ? { previous: previous.id } : {}), origin: { type: Object.keys(origins).length ? "promotion" : "literal",
       ...(Object.keys(origins).length ? { files: origins } : {}), ...(input.delivery ? { delivery: input.delivery } : {}) } }
@@ -521,7 +565,7 @@ export type Publication = { guardado: false } | (Saved & { indice?: { actualizad
 export async function publishSession(input: {
   sessionID: string; messageID?: string; agent: string; topic: string;
   files: Record<string, FileInput>; group?: string; sources?: string[]; decisions?: string[]; keys?: string[];
-  operationID?: string; publicationType?: string
+  operationID?: string; publicationType?: string; workID?: string
 }, options: Options): Promise<Publication> {
   const names = Object.keys(input.files)
   if (!names.length || names.some(name => typeof input.files[name] === "string" && !input.files[name].trim())) throw new Error("Entregables vacíos")
@@ -556,26 +600,12 @@ export async function publishSession(input: {
   await mkdir(stateDir, { recursive: true })
   await directory(stateDir)
   return locked(join(stateDir, ".lock"), async () => {
-    const stateFile = join(stateDir, "state.json")
-    let state: State
-    try {
-      state = await loadState(stateDir)
-    }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-      let rootFolder = rootName(nodes[0].created, agentNames[nodes[0].agent], nodes[0].title || input.topic)
-      for (let n = 1; ; n++) {
-        try { await mkdir(join(root, rootFolder)); break }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
-          rootFolder = `${rootName(nodes[0].created, agentNames[nodes[0].agent], nodes[0].title || input.topic)}-${String(n + 1).padStart(2, "0")}`
-        }
-      }
-      state = { root: rootFolder, entries: {}, deliveries: [], sources: [], decisions: [], keys: [], schemaVersion: 1,
-        artifacts: {}, operations: {}, reviews: {}, versions: {} }
-      await saveJson(stateFile, state)
-    }
+    const state = await loadOrCreateState(root, stateDir, nodes[0], input.topic)
     const sessionDir = await sessionDirectory(root, state)
+    if (input.workID) {
+      const work = await authorizedWork(state, input.workID, nodes, options)
+      if (work.responsibleSessionID !== input.sessionID) throw new Error("Solo el responsable actual publica para el encargo")
+    }
     for (const node of nodes) {
       const entry = state.entries[node.id]
       if (entry && (entry.parent !== node.parentID || entry.agent !== agentNames[node.agent]))
@@ -619,6 +649,228 @@ export async function publishSession(input: {
   })
 }
 
+type Actor = { sessionID: string; messageID?: string; agent: string }
+
+function checkReader(current: Identity, nodes: Identity[], allowed: string[]) {
+  if ((current.agent === "lector-codigo" && nodes.length > 1 || current.agent === "lector-documentacion" && nodes.some(n => n.agent === "investigador")) &&
+      !allowed.includes(current.agent)) throw new Error("Especialista deshabilitado")
+}
+
+async function workIdentity(id: string, nodes: Identity[], options: Options) {
+  const other = await chain(id, undefined, options.get)
+  if (other[0].id !== nodes[0].id || other[0].directory !== nodes[0].directory)
+    throw new Error("Sesión de otra raíz o proyecto")
+  return other.at(-1)!
+}
+
+function manages(work: Work, sessionID: string, state: State): boolean {
+  const visited = new Set<string>()
+  for (let current: Work | undefined = work; current; current = current.parentID ? state.work[current.parentID] : undefined) {
+    if (visited.has(current.id)) throw new Error("Árbol de encargos inválido")
+    visited.add(current.id)
+    if (current.ownerSessionID === sessionID || current.responsibleSessionID === sessionID) return true
+  }
+  return false
+}
+
+async function authorizedWork(state: State, id: string, nodes: Identity[], options: Options) {
+  const work = state.work[id]
+  const actor = nodes.at(-1)!
+  if (!work || work.rootSessionID !== nodes[0].id || !(manages(work, actor.id, state) ||
+      work.assignments.includes(actor.id) || work.reviews.some(r => r.sessionID === actor.id)))
+    throw new Error("Encargo no asignado o de otra raíz/corpus")
+  if (actor.agent === "revisor" && !work.reviews.some(r => r.sessionID === actor.id && state.artifacts[r.artifactID]?.producerSessionID === actor.parentID))
+    throw new Error("Revisor fuera del árbol de la entrega asignada")
+  // Revalidate both ends against the current runtime, not model-supplied recipient labels.
+  const owner = await workIdentity(work.ownerSessionID, nodes, options)
+  if (work.agents[owner.id] !== owner.agent) throw new Error("Propietario del encargo distinto del registro")
+  for (const id of new Set([...work.assignments, work.responsibleSessionID])) {
+    const assigned = await workIdentity(id, nodes, options)
+    if (id !== owner.id && assigned.parentID !== owner.id || work.agents[id] !== assigned.agent)
+      throw new Error("Responsable fuera del árbol autorizado")
+  }
+  if (work.parentID) {
+    const parent = state.work[work.parentID]
+    if (!parent || parent.corpus !== work.corpus || parent.referencia !== work.referencia ||
+        !parent.assignments.includes(owner.id)) throw new Error("Encargo padre/corpus no verificable")
+  }
+  return work
+}
+
+async function canReadArtifact(artifact: Artifact, work: Work, nodes: Identity[], state: State, options: Options) {
+  if (artifact.workID !== work.id || artifact.rootSessionID !== nodes[0].id) return false
+  const actor = nodes.at(-1)!
+  const producer = await workIdentity(artifact.producerSessionID, nodes, options)
+  if (producer.agent !== artifact.agent) throw new Error("Productor distinto del registro")
+  const owner = producer.agent === "revisor" ? await workIdentity(producer.parentID!, nodes, options) : producer
+  const entry = state.entries[owner.id]
+  if (!entry || entry.parent !== owner.parentID || entry.agent !== owner.agent) throw new Error("Productor sin carpeta verificada")
+  for (const file of artifact.files) within(join("/", entry.folder), join("/", file.path))
+  if (!Object.values(state.operations).some(op => op.phase === "confirmed" && op.artifact.id === artifact.id))
+    throw new Error("Artefacto sin publicación confirmada")
+  if (actor.agent === "revisor") return work.reviews.some(r => r.sessionID === actor.id &&
+    (r.artifactID === artifact.id && producer.id === actor.parentID || producer.id === actor.id &&
+      state.artifacts[r.artifactID]?.deliveries.includes(artifact.origin.delivery ?? "")))
+  if (actor.id !== work.responsibleSessionID && !manages(work, actor.id, state) && producer.id !== actor.id) return false
+  if (!(work.assignments.includes(producer.id) || artifact.agent === "revisor" && work.reviews.some(r => r.sessionID === producer.id))) return false
+  // Only known producer reports are conclusions. Unknown registered sources and planner
+  // originals cannot acquire Jira/raw-source permissions through a caller-supplied label.
+  const report = artifact.type === "publish_agent_deliverable" || artifact.type === "write_report_pair" && artifact.agent === "investigador" ||
+    artifact.type === `session:${artifact.agent}:file`
+  if (actor.agent === "investigador" && !report) return false
+  if (actor.agent === "lector-codigo" && artifact.agent !== "lector-codigo" && artifact.agent !== "investigador") return false
+  if (actor.agent === "lector-documentacion" && ["lector-codigo", "arquitecto-test"].includes(artifact.agent)) return false
+  if (actor.agent === "arquitecto-test" && !["arquitecto", "arquitecto-test", "revisor"].includes(artifact.agent)) return false
+  return true
+}
+
+export async function sessionWork(raw: WorkRequest, actor: Actor, options: Options): Promise<unknown> {
+  const input = workRequest.parse(raw)
+  const nodes = await chain(actor.sessionID, actor.messageID, options.get)
+  const current = nodes.at(-1)!
+  if (current.agent !== actor.agent) throw new Error("Autor del registro diferente")
+  const writing = !["list", "get"].includes(input.action)
+  if (writing && current.agent === "revisor") throw new Error("Revisor solo consulta el registro; publica su dictamen por write_review_documents")
+  const settings = await readAgentSettings(options.settingsPath)
+  checkReader(current, nodes, settings.agentes.investigador.especialistasPermitidos)
+  if (writing && !settings.agentes[agentNames[current.agent]].guardarEntregablesEnSesion) return { guardado: false }
+  const location = await stateLocation(nodes, options, writing).catch(error => {
+    if (!writing && error.code === "ENOENT") return undefined
+    throw error
+  })
+  if (!location) {
+    if (input.action === "list") return { encargos: [] }
+    throw new Error("Encargo no registrado; sin historial persistido verificable")
+  }
+  const { root, stateDir } = location
+  const run = async () => {
+    const state = writing ? await loadOrCreateState(root, stateDir, nodes[0], "encargo") : await loadState(stateDir, false)
+    if (input.action === "list") {
+      const works = []
+      for (const work of Object.values(state.work)) {
+        if (!(manages(work, current.id, state) || work.assignments.includes(current.id) || work.reviews.some(r => r.sessionID === current.id))) continue
+        works.push(await authorizedWork(state, work.id, nodes, options))
+      }
+      return { encargos: works }
+    }
+    let work: Work
+    if (input.action === "create") {
+      if (input.padre_id) {
+        const parent = await authorizedWork(state, input.padre_id, nodes, options)
+        if (parent.responsibleSessionID !== current.id || parent.corpus !== input.corpus || parent.referencia !== input.referencia)
+          throw new Error("El subencargo requiere responsable actual y mismo corpus/referencia")
+      }
+      const responsible = await workIdentity(input.responsable_session_id ?? current.id, nodes, options)
+      if (responsible.id !== current.id && responsible.parentID !== current.id) throw new Error("Responsable no es hijo directo autorizado")
+      if (responsible.agent === "revisor") throw new Error("Asigna al Revisor una entrega exacta, no la responsabilidad del encargo")
+      work = { id: `work-${randomUUID()}`, rootSessionID: nodes[0].id, ownerSessionID: current.id,
+        responsibleSessionID: responsible.id, assignments: [responsible.id],
+        agents: { [current.id]: current.agent, [responsible.id]: responsible.agent },
+        ...(input.padre_id ? { parentID: input.padre_id } : {}), pregunta: input.pregunta, criterios: input.criterios,
+        corpus: input.corpus, referencia: input.referencia, events: [], reviews: [] }
+      state.work[work.id] = work
+    } else {
+      work = await authorizedWork(state, input.encargo_id, nodes, options)
+      if (input.action === "get") return { encargo: work }
+      if (input.action === "assign") {
+        if (current.id !== work.ownerSessionID) throw new Error("Solo el coordinador propietario asigna sustituto")
+        const responsible = await workIdentity(input.responsable_session_id, nodes, options)
+        const previous = await workIdentity(work.responsibleSessionID, nodes, options)
+        if (responsible.id !== current.id && responsible.parentID !== current.id || responsible.agent === "revisor" ||
+            previous.id !== current.id && responsible.agent !== previous.agent) throw new Error("Sustituto fuera del árbol o especialidad autorizados")
+        work.responsibleSessionID = responsible.id
+        work.agents[responsible.id] = responsible.agent
+        if (!work.assignments.includes(responsible.id)) work.assignments.push(responsible.id)
+      } else if (input.action === "record") {
+        if (![work.ownerSessionID, work.responsibleSessionID].includes(current.id)) throw new Error("Solo propietario o responsable actual registra resultados")
+        if (input.suficiencia === "completo" && input.pendientes.length) throw new Error("Un resultado con pendientes sigue siendo parcial")
+        if (input.artefacto_id) {
+          const artifact = state.artifacts[input.artefacto_id]
+          if (!artifact || !await canReadArtifact(artifact, work, nodes, state, options)) throw new Error("Resultado de otro encargo/corpus o no verificable")
+          await verifyArtifact(await sessionDirectory(root, state), artifact, state)
+        }
+        const history = input.historial_revision
+        const previous = work.events.findLast(e => e.historial_revision)?.historial_revision
+        if (history && (history.intentos_consumidos > history.limite || previous &&
+            (history.intentos_consumidos < previous.intentos_consumidos || history.limite !== previous.limite)))
+          throw new Error("Historial de intentos incompatible; no se reinicia el encargo")
+      } else if (input.action === "review") {
+        const artifact = state.artifacts[input.artefacto_id]
+        const reviewer = await workIdentity(input.revisor_session_id, nodes, options)
+        if (!artifact || artifact.producerSessionID !== current.id || !await canReadArtifact(artifact, work, nodes, state, options) ||
+            reviewer.agent !== "revisor" || reviewer.parentID !== current.id) throw new Error("Revisor o entrega fuera de la delegación autorizada")
+        if (!work.reviews.some(r => r.sessionID === reviewer.id && r.artifactID === artifact.id))
+          work.reviews.push({ sessionID: reviewer.id, artifactID: artifact.id })
+      }
+    }
+    // These are authored declarations. Only session/message identity is runtime evidence;
+    // there is deliberately no fabricated turn ID, scheduler state or integration receipt.
+    const { action, ...data } = input.action === "record" ? input : { action: input.action }
+    const event: WorkEvent = { ...data, action, sessionID: current.id, ...(actor.messageID ? { messageID: actor.messageID } : {}),
+      ...(input.action === "assign" || input.action === "create" ? { responsibleSessionID: work.responsibleSessionID } : {}) }
+    work.events.push(event)
+    await saveJson(join(stateDir, "state.json"), state)
+    return { guardado: true, encargo: work }
+  }
+  return writing ? locked(join(stateDir, ".lock"), run) : run()
+}
+
+function pageOffset(cursor: string | undefined, binding: string, length: number) {
+  if (!cursor) return 0
+  let data: { binding: string; offset: number }
+  try { data = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) } catch { throw new Error("Cursor inválido") }
+  if (!data || typeof data !== "object" || data.binding !== binding || !Number.isSafeInteger(data.offset) || data.offset < 0 || data.offset >= length)
+    throw new Error("Cursor de otro solicitante, encargo, archivo o versión")
+  return data.offset
+}
+const nextCursor = (binding: string, offset: number, length: number) => offset < length
+  ? Buffer.from(JSON.stringify({ binding, offset })).toString("base64url") : null
+
+export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, options: Options): Promise<unknown> {
+  const input = artifactRequest.parse(raw)
+  const nodes = await chain(actor.sessionID, actor.messageID, options.get)
+  if (nodes.at(-1)!.agent !== actor.agent) throw new Error("Lector del artefacto diferente")
+  const settings = await readAgentSettings(options.settingsPath)
+  checkReader(nodes.at(-1)!, nodes, settings.agentes.investigador.especialistasPermitidos)
+  const { root, stateDir } = await stateLocation(nodes, options, false)
+  const state = await loadState(stateDir, false)
+  const work = await authorizedWork(state, input.encargo_id, nodes, options)
+  if (input.corpus !== work.corpus || input.referencia !== work.referencia) throw new Error("Corpus/referencia del encargo distintos")
+  const sessionDir = await sessionDirectory(root, state)
+  const accessible: Artifact[] = []
+  for (const artifact of Object.values(state.artifacts))
+    if (artifact.workID === work.id && await canReadArtifact(artifact, work, nodes, state, options)) accessible.push(artifact)
+  accessible.sort((a, b) => a.id.localeCompare(b.id))
+  if (input.action === "list") {
+    const limit = input.limite ?? 20
+    if (limit > 100) throw new Error("Inventario: limite máximo 100")
+    const binding = hash(JSON.stringify([actor.sessionID, work.id, "list", accessible.map(a => [a.id, a.manifestHash])]))
+    const offset = pageOffset(input.cursor, binding, accessible.length)
+    const page = accessible.slice(offset, offset + limit)
+    for (const artifact of page) await verifyArtifact(sessionDir, artifact, state)
+    return { artefactos: page.map(artifact => {
+      const operation = Object.values(state.operations).find(op => op.phase === "confirmed" && op.artifact.id === artifact.id)!
+      return { ...artifact, operacion_id: operation.logicalID, fuentes: operation.sources, decisiones: operation.decisions, claves: operation.keys }
+    }), cursor: nextCursor(binding, offset + page.length, accessible.length) }
+  }
+  const artifact = accessible.find(a => a.id === input.artefacto_id)
+  const file = artifact?.files.find(f => f.path === input.archivo)
+  if (!artifact || !file) throw new Error("Artefacto/archivo no asignado o no registrado")
+  await verifyArtifact(sessionDir, artifact, state)
+  const path = join(sessionDir, file.path)
+  await checkedFile(sessionDir, path)
+  const bytes = await readFile(path)
+  if (hash(bytes) !== file.sha256 || bytes.length !== file.bytes) throw new Error("Contenido del artefacto modificado externamente")
+  const text = bytes.toString("utf8")
+  const binding = hash(JSON.stringify([actor.sessionID, work.id, artifact.id, file.path, file.sha256]))
+  const offset = pageOffset(input.cursor, binding, text.length)
+  if (offset && /[\uDC00-\uDFFF]/.test(text[offset]) && /[\uD800-\uDBFF]/.test(text[offset - 1])) throw new Error("Cursor dentro de un carácter Unicode")
+  let end = Math.min(offset + (input.limite ?? 4000), text.length)
+  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1]) && /[\uDC00-\uDFFF]/.test(text[end])) end++
+  return { artefacto_id: artifact.id, archivo: file.path, sha256: file.sha256, inicio: offset, fin: end,
+    total: text.length, unidad: "UTF-16", contenido: text.slice(offset, end), cursor: nextCursor(binding, end, text.length) }
+}
+
 // Append reviewer-authored reports to an existing, indexed delivery of its direct parent.
 export async function publishReview(input: {
   sessionID: string; messageID?: string; delivery: string; sanity?: string; dispute?: string; operationID?: string; verdict?: Verdict
@@ -657,6 +909,11 @@ export async function publishReview(input: {
     const reference = relative(sessionDir, target).replace(/\\/g, "/")
     if (!state.deliveries.includes(reference)) throw new Error("Entrega no registrada")
     const artifact = Object.values(state.artifacts).find(a => a.deliveries.includes(reference))
+    if (artifact?.workID) {
+      const work = await authorizedWork(state, artifact.workID, nodes, options)
+      if (!work.reviews.some(r => r.sessionID === reviewer.id && r.artifactID === artifact.id))
+        throw new Error("Revisión no asignada a la entrega exacta del encargo")
+    }
     const verdict = input.verdict ? checkedVerdict(input.verdict) : undefined
     if (verdict && (!artifact || artifact.producerSessionID !== producer.id || artifact.agent !== producer.agent ||
         artifact.rootSessionID !== nodes[0].id || artifact.id !== verdict.artefacto_id || artifact.manifestHash !== verdict.hash_manifiesto))
@@ -679,7 +936,8 @@ export async function publishReview(input: {
     const paths: Record<string, string> = {}
     for (const [name] of files) paths[name] = join(folder, safeName(name))
     const request: Request = { sessionID: input.sessionID, operationID: logicalID, agent: reviewer.agent,
-      type: "write_review_documents", topic: reference, delivery: reference, files: Object.fromEntries(files), verdict }
+      type: "write_review_documents", topic: reference, delivery: reference, files: Object.fromEntries(files), verdict,
+      ...(artifact?.workID ? { workID: artifact.workID } : {}) }
     if (existing) {
       if (existing.digest !== requestDigest(request)) throw new Error("Identidad de operación reutilizada con contenido distinto")
       return finish(state, stateDir, sessionDir, existing, nodes[0].title, options)

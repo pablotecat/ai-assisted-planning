@@ -335,11 +335,12 @@ test("OpenCode autoriza efectivamente las lecturas y deniega escrituras para amb
       ...[...sharedSkills, "plantillas-entregables", "user-stories", "domain-glossary", "meeting-coach", "unknown-skill"]
         .map(resource => ({ action: "skill", resource })),
       ...[...paths, ...forbiddenPaths].map(resource => ({ action: "read", resource })),
-      { action: "execute", resource: "*" }]
+      { action: "execute", resource: "*" }, ...["session_work", "session_artifacts"].map(action => ({ action, resource: "*" }))]
     await withServer(root, env, async connected => {
     for (const agent of [...jiraAgents, "lector-codigo", "arquitecto-test"]) {
       const { decisions } = probe(root, connected, { agent, checks })
       assert.equal(decisions["execute:*"], jiraAgents.includes(agent) ? "allow" : "deny", agent)
+      for (const tool of ["session_work", "session_artifacts"]) assert.equal(decisions[`${tool}:*`], "allow", `${agent}: ${tool}`)
       for (const alias of ["jira", "atlassian"]) {
         for (const name of [...reads, ...writes, "atlassianUserInfo"]) {
           const expected = jiraAgents.includes(agent) && (reads.includes(name) || name === "atlassianUserInfo" && agent !== "revisor")
@@ -449,8 +450,13 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
     const planning = probe(host, toolEnv, { agent: "planificador", tool: "planning_settings", args: {} })
     assert.ok(JSON.stringify(planning.result).includes("PROYECTO_JIRA"), "Herramientas de archivo V1 compatibles en V2")
     for (const tool of ["agent_settings", "investigator_defaults", "architecture_settings", "refinement_settings",
-      "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair", "write_review_documents"])
-      assert.ok(planning.tools.includes(tool), `Herramienta instalada: ${tool}`)
+      "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair", "write_review_documents", "session_work", "session_artifacts"])
+       assert.ok(planning.tools.includes(tool), `Herramienta instalada: ${tool}`)
+    for (const name of ["session_work", "session_artifacts"]) {
+      assert.ok(!planning.codeModeTools.includes(name), `${name}: interfaz directa instalada`)
+      for (const agent of [...jiraAgents, "lector-codigo", "arquitecto-test"])
+        assert.equal(probe(host, toolEnv, { agent, checks: [{ action: name, resource: "*" }] }).decisions[`${name}:*`], "allow", `${agent}: ${name}`)
+    }
     for (const name of ["consulta-jira", "operativa-comun"]) {
       const result = probe(host, toolEnv, { agent: "investigador", tool: "skill", args: { id: name } })
       assert.ok(JSON.stringify(result.result).includes(`# ${name === "consulta-jira" ? "Consulta Jira" : "Operativa común"}`))

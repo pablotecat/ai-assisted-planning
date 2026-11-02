@@ -10,6 +10,8 @@ import writePlanningOriginals from "../tools/write_planning_originals.ts"
 import writePlanningDeliverables from "../tools/write_planning_deliverables.ts"
 import writeReportPair from "../tools/write_report_pair.ts"
 import writeReviewDocuments from "../tools/write_review_documents.ts"
+import sessionWork from "../tools/session_work.ts"
+import sessionArtifacts from "../tools/session_artifacts.ts"
 import { makeIdentity } from "../tools/identity.ts"
 
 const packageAgents = new Set(["investigador", "lector-codigo", "lector-documentacion", "planificador",
@@ -27,8 +29,10 @@ export default Plugin.define({
         refinement_settings: refinementSettings, publish_agent_deliverable: publishAgentDeliverable,
         write_planning_originals: writePlanningOriginals, write_planning_deliverables: writePlanningDeliverables,
         write_report_pair: writeReportPair, write_review_documents: writeReviewDocuments,
+        session_work: sessionWork, session_artifacts: sessionArtifacts,
       })) {
-        const schema = tool.schema.object(definition.args)
+        const inputSchema = tool.schema.object(definition.args)
+        const schema = name === "session_work" || name === "session_artifacts" ? inputSchema.strict() : inputSchema
         editor.add({
           name, description: definition.description,
           input: tool.schema.toJSONSchema(schema, { unrepresentable: "any" }), options: { codemode: false },

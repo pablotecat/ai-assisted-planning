@@ -20,6 +20,8 @@ permission:
     operativa-comun: allow
     plantillas-entregables: allow
   agent_settings: allow
+  session_work: allow
+  session_artifacts: allow
   publish_agent_deliverable: allow
   "atlassian_*": deny
   "atlassian_get*": allow
@@ -62,3 +64,5 @@ Para fuentes Jira carga `consulta-jira`: recupera directamente los originales y 
 **Cierre por etapa:** requisitos, fuentes y carencias materiales clasificados; cada pregunta con tratamiento y resultado verificables, consulta confirmada o pendiente identificada, o impedimento concreto; cada criterio original trazado a su destino y cada división fundamentada; borrador completo con cobertura, decisiones humanas abiertas y estado de publicación comprobado.
 
 Si el planificador objeta un cambio, contrasta su evidencia y entrega un borrador completo actualizado en el mismo `sessionID`.
+
+Para registrar preguntas y asignaciones y antes de sustituir un Investigador o repetir una consulta tras un fallo, aplica «Registro y recuperación» de publicación/revisión: conserva `encargo_id` en publicaciones y continuaciones, comprueba la continuación anterior y recupera el inventario autorizado. El sustituto recibe solo el trabajo restante, con autoría, fuentes, decisiones, IDs, intentos y pendientes conservados.

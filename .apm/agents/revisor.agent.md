@@ -15,6 +15,8 @@ permission:
   grep: allow
   external_directory: allow
   write_review_documents: allow
+  session_work: allow
+  session_artifacts: allow
   "atlassian_*": deny
   "atlassian_get*": allow
   "atlassian_list*": allow

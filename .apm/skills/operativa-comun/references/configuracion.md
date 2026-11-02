@@ -8,7 +8,7 @@ En flujos completos combina los datos confirmados con los indicados para el enca
 
 ## Herramientas y autorizaciones
 
-Resuelve cada herramienta por la interfaz y firma expuestas al rol en esta sesión. Las herramientas de configuración siguientes y los publicadores del paquete se invocan directamente; no se buscan dentro de `execute`. En Code Mode, `search()` descubre solo su catálogo y las operaciones encontradas se llaman desde `execute` con su ruta y argumentos exactos. Una búsqueda vacía en ese catálogo parcial no acredita ausencia de una herramienta directa ni su disponibilidad en otro rol. Reutiliza las firmas verificadas mientras sigan vigentes; ante cambios, comprueba solo las afectadas.
+Resuelve cada herramienta por la interfaz y firma expuestas al rol en esta sesión. Las herramientas de configuración siguientes, `session_work`, `session_artifacts` y los publicadores del paquete se invocan directamente; no se buscan dentro de `execute`. En Code Mode, `search()` descubre solo su catálogo y las operaciones encontradas se llaman desde `execute` con su ruta y argumentos exactos. Una búsqueda vacía en ese catálogo parcial no acredita ausencia de una herramienta directa ni su disponibilidad en otro rol. Reutiliza las firmas verificadas mientras sigan vigentes; ante cambios, comprueba solo las afectadas.
 
 Clasifica la disponibilidad con la evidencia obtenida:
 

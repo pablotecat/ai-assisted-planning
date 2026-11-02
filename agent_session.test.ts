@@ -46,9 +46,11 @@ async function adapter(nodes: Record<string, Identity>) {
 
 const base = { title: "Consulta", created: 1, directory: "proyecto" }
 
-test("las diez herramientas se registran en V2 y validan permisos e inputs", async () => {
+test("las herramientas explícitas se registran en V2 y validan permisos e inputs", async () => {
   const { tools, permissions } = await adapter({})
-  assert.equal(Object.keys(tools).length, 10)
+  assert.deepEqual(Object.keys(tools).sort(), ["agent_settings", "architecture_settings", "investigator_defaults", "planning_settings",
+    "refinement_settings", "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair",
+    "write_review_documents", "session_work", "session_artifacts"].sort())
   for (const definition of Object.values(tools)) assert.equal(definition.options.codemode, false)
   const context = { sessionID: "s", messageID: "mensaje", id: "call", agent: "planificador" }
   const result = await tools.planning_settings.execute({}, context)

@@ -15,6 +15,8 @@ permission:
   list: allow
   external_directory: allow
   agent_settings: allow
+  session_work: allow
+  session_artifacts: allow
   publish_agent_deliverable: allow
   edit: deny
   task:

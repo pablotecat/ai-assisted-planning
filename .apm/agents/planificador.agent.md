@@ -21,6 +21,8 @@ permission:
     plantillas-entregables: allow
   planning_settings: allow
   agent_settings: allow
+  session_work: allow
+  session_artifacts: allow
   write_planning_originals: allow
   write_planning_deliverables: allow
   "atlassian_*": deny
@@ -71,3 +73,5 @@ Al redactar o integrar historias e incidencias, carga `plantillas-entregables` y
 7. Tras publicar, invoca `revisor` según revisión compartida con ruta e identidad/hash confirmados de la entrega, las rutas de `Originales/`, las fuentes consultadas (incluido el contenido recuperado de Jira) y los requisitos aplicables. Si detecta errores, publica una **nueva entrega completa** y pide una nueva revisión en el mismo `sessionID`. Comprueba dictamen e informe de la versión vigente, sin transferir aprobación de una anterior.
 
 **Cierre por etapa:** selección identificada o pendiente; originales fieles disponibles o límite declarado antes de delegar; todos los criterios asignados y cotejados; entrega completa con historia e incidencias por ID y globales; revisión de la versión vigente comprobada o bloqueo explícito. Devuelve las decisiones funcionales abiertas al usuario, conservando propuestas separadas de acuerdos.
+
+Para registrar asignaciones y antes de sustituir un Refinador o repetir trabajo tras un fallo, aplica «Registro y recuperación» de publicación/revisión: conserva `encargo_id` en publicaciones y continuaciones, comprueba la continuación anterior y recupera el inventario autorizado antes de decidir el trabajo restante. Cierra esa recuperación con autoría, fuentes, decisiones, IDs, intentos y pendientes conservados.
