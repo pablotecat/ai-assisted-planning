@@ -66,7 +66,7 @@ Las reglas que no pueden expresarse como escenario completo (definiciones, permi
 
 La tabla de trazabilidad cubre todos los criterios originales, incluidos los repartidos a otras historias y los pendientes, con el literal citado y su fuente. La evidencia de cada hallazgo vive en este documento, una sola vez; el cuerpo de la historia conserva únicamente los escenarios y las decisiones con su responsable. Si no hay incidencias, conserva «Ninguna identificada» y el alcance comprobado; la trazabilidad se mantiene mientras existan criterios originales que cotejar.
 
-Publica mediante los argumentos vigentes de `write_planning_deliverables`: `historias[{clave, contenido, incidencias}]`, `incidencias_globales`, `fuentes?`, `decisiones?`. En `write_planning_originals(historias[{clave, contenido}])` guarda el contenido fiel y la procedencia en `Originales/`, con texto literal separado del análisis; no apliques la reestructuración de Historia a ese original.
+Publica mediante los argumentos vigentes de `write_planning_deliverables`: `historias[{clave, contenido, incidencias}]`, `incidencias_globales`, `fuentes?`, `decisiones?`. Para reutilizar archivos finales completos, aplica las alternativas de origen por archivo de [promoción](../../operativa-comun/references/publicacion-revision.md#promoción-de-archivos-completos), conservando historia, incidencias y globales: un contenedor `borrador.md` no se convierte automáticamente en `<ID>.md`. En `write_planning_originals(historias[{clave, contenido}])` guarda el contenido fiel y la procedencia en `Originales/`, con texto literal separado del análisis; no apliques la reestructuración de Historia a ese original.
 
 ## Ejemplo ficticio — historia dividida
 

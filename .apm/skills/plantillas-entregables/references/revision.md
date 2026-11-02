@@ -4,7 +4,7 @@
 
 Revisor usa el formato de dictamen para `sanity-check.md`, incluso sin hallazgos, y consulta además la plantilla del contenido revisado. Los nombres efectivos, incluidos prefijos de archivos versionados, los asigna `write_review_documents`. Al publicar, comprobar una revisión o continuar aplica [publicación y revisión](../../operativa-comun/references/publicacion-revision.md), única norma de guardado, versión exacta e intentos (consumo, límite, reapertura, aprobación parcial y fallos). El contrato de arquitectura define alcance y estados.
 
-Todos los apartados son obligatorios. Intento, límite e historial se incluyen cuando la norma compartida los exige. Identifica la entrega por ruta confirmada y versión exacta; para una carpeta, delimita todos sus archivos. En una revisión parcial enumera aprobados con dependencias, pendientes y bloqueados según la norma y estados aplicables.
+Todos los apartados son obligatorios. Intento, límite e historial se incluyen cuando la norma compartida los exige. Identifica la entrega por ruta confirmada y versión exacta y, si están registrados, `artefacto_id` y `hash_manifiesto`; para una carpeta, delimita todos sus archivos. En una revisión parcial enumera aprobados con dependencias, pendientes y bloqueados según la norma y estados aplicables. Los IDs del alcance y sus resultados coinciden con el `dictamen` estructurado enviado junto a `sanidad`, según la norma compartida; el informe narrativo conserva evidencia, impacto y motivos.
 
 Al revisar historias, aplica [criterios de aceptación](criterios-aceptacion.md): un criterio que no sea un escenario completo y autónomo, una regla publicada como criterio, una cláusula «Y» huérfana publicada como criterio independiente o evidencia dentro del cuerpo de un criterio son hallazgos materiales con impacto en la utilización de la entrega, no cuestiones cosméticas. Comprueba también que la trazabilidad al original y la evidencia residan en el archivo de incidencias con todos los criterios originales cubiertos.
 
@@ -18,6 +18,7 @@ Al revisar historias, aplica [criterios de aceptación](criterios-aceptacion.md)
 **Dictamen:** <favorable, parcial o con hallazgos>
 **Productor y encargo:** <agente; ENC-ID o identificador del encargo>
 **Entrega exacta:** <ruta confirmada; versión y archivos incluidos>
+**Identidad registrada:** <artefacto_id y hash_manifiesto; o Histórica sin identidad registrada>
 **Intento e historial:** <número, límite y registro si aplica; o No aplica: motivo>
 
 ## Fuentes y alcance comprobado

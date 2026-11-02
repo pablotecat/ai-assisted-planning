@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { dirname, join, relative } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import test from "node:test"
 import { spawnSync } from "node:child_process"
@@ -112,7 +112,7 @@ test("los cinco publicadores conservan su resolvedor aunque se inicialice otra i
 
 test("servicio OpenCode real: los cinco publicadores guardan antes y después de recargar el location", {
   skip: opencode(["--version"], source).status !== 0 ? "Requiere OpenCode en PATH" : false,
-  timeout: 300_000,
+  timeout: 420_000,
 }, async () => {
   const { root, config, env } = await fixture(true)
   try {
@@ -173,6 +173,64 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
       const operations: PublicationCall[] = []
       const stable = await round("idempotente", operations)
       assert.equal(operations.length, 5)
+      async function s05Round(current: typeof stable, label: string, tracked?: PublicationCall[]) {
+        const calls: PublicationCall[] = []
+        const call = async (agent: string, tool: string, args: object) => {
+          const result = await current.call(agent, tool, args, true)
+          assert.ok(result.guardado)
+          calls.push({ agent, tool, args, result })
+          return result
+        }
+        const origin = (publication: any, name: string) => {
+          const path = relative(publication.sesion, publication.rutas[name]).replace(/\\/g, "/")
+          const file = publication.archivos.find((file: any) => file.path === path)
+          assert.ok(file, "referencia obtenida del retorno del publicador, sin lectura adicional")
+          return { artefacto_id: publication.artefacto_id, archivo: file.path, sha256: file.sha256 }
+        }
+        const promotionArgs = { operacion_id: `promocion-${label}`, historias: [{ clave: "APP-1",
+          origen_contenido: await origin(current.delivery, "APP-1.md"),
+          origen_incidencias: await origin(current.delivery, "APP-1-incidencias.md") }],
+          origen_incidencias_globales: await origin(current.delivery, "incidencias-globales.md") }
+        const promoted = await call("planificador", "write_planning_deliverables", promotionArgs)
+        for (const name of Object.keys(current.delivery.rutas))
+          assert.deepEqual(await readFile(promoted.rutas[name]), await readFile(current.delivery.rutas[name]))
+        const latest = await call("planificador", "write_planning_deliverables", { operacion_id: `nueva-${label}`,
+          historias: [{ clave: "APP-1", contenido: "Nueva versión completa", incidencias: "Ninguna" }], incidencias_globales: "Ninguna" })
+        const verdict = { artefacto_id: promoted.artefacto_id, hash_manifiesto: promoted.hash_manifiesto,
+          resultado: "parcial", alcance: ["CA-1", "CA-2"], aprobados: ["CA-1"], pendientes: ["CA-2"], bloqueados: [] }
+        const reviewArgs = { operacion_id: `revision-${label}`, entrega: dirname(promoted.rutas["APP-1.md"]),
+          sanidad: "CA-1 aprobado; CA-2 pendiente. Revisión tardía de la versión promovida.", dictamen: verdict }
+        const reviewed = await call("revisor", "write_review_documents", reviewArgs)
+        assert.deepEqual(await current.call("revisor", "write_review_documents", reviewArgs, true), reviewed)
+        for (const name of Object.keys(current.delivery.rutas))
+          assert.deepEqual(await readFile(promoted.rutas[name]), await readFile(current.delivery.rutas[name]))
+        const invalid = probe(root, connected, { sessionID: current.ids.planificador, messageID: `msg_retry_${label === "antes" ? "idempotente" : "despues"}_planificador`,
+          agent: "planificador", tool: "write_planning_deliverables", args: { ...promotionArgs, operacion_id: `hash-incorrecto-${label}`,
+            historias: [{ ...promotionArgs.historias[0], origen_contenido: { ...promotionArgs.historias[0].origen_contenido, sha256: "0".repeat(64) } }] }, captureError: true })
+        assert.match(invalid.error, /Hash de origen incorrecto/)
+        const stateID = createHash("sha256").update(root + "\0" + current.ids.planificador).digest("hex")
+        const state = JSON.parse(await readFile(join(root, "informes-agente", "sesiones", ".control", stateID, "state.json"), "utf8"))
+        const version = Object.values<any>(state.versions).find(version => version.type === "write_planning_deliverables")
+        assert.equal(version.published, latest.artefacto_id)
+        assert.equal(version.reviewed, promoted.artefacto_id)
+        assert.equal(version.approved, undefined)
+        assert.deepEqual(state.reviews[reviewed.artefacto_id].verdict, verdict)
+        assert.equal(state.artifacts[promoted.artefacto_id].manifestHash, promoted.hash_manifiesto)
+        const index = await readFile(join(promoted.sesion, "indice.md"), "utf8")
+        assert.match(index, /aprobación parcial; sin aprobación completa/)
+        assert.match(index, /pendiente de revisión/)
+        for (const match of index.matchAll(/\]\(\.\/([^)]*)\)/g)) assert.ok(await stat(join(promoted.sesion, decodeURI(match[1]))), match[1])
+        // Exercise the other two promotion schemas through the installed registry too.
+        const note = await call("investigador", "publish_agent_deliverable", { operacion_id: `nota-${label}`, nombre: "nota.md", contenido: "Nota íntegra\r\nñ" })
+        await call("investigador", "publish_agent_deliverable", { operacion_id: `nota-promovida-${label}`, nombre: "nota.md", origen: await origin(note, "nota.md") })
+        const pair = await call("investigador", "write_report_pair", { operacion_id: `par-${label}`, slug: "consulta",
+          resumen_ejecutivo: "Resumen\r\nñ", informe_detallado: "Detalle\n" })
+        const promotedPair = await call("investigador", "write_report_pair", { operacion_id: `par-promovido-${label}`, slug: "consulta",
+          origen_resumen_ejecutivo: await origin(pair, "resumen-ejecutivo.md"), origen_informe_detallado: await origin(pair, "informe-detallado.md") })
+        for (const name of Object.keys(pair.rutas)) assert.deepEqual(await readFile(promotedPair.rutas[name]), await readFile(pair.rutas[name]))
+        tracked?.push(...calls)
+      }
+      await s05Round(stable, "antes", operations)
       const snapshots = new Map<string, Buffer>()
       for (const operation of operations) for (const path of Object.values<string>(operation.result.rutas))
         snapshots.set(path, await readFile(path))
@@ -189,6 +247,7 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
       api("post", "/api/location/reload", root, connected, {})
       const after = await round("despues")
       assert.notEqual(after.delivery.sesion, before.delivery.sesion)
+      await s05Round(after, "despues")
       for (const operation of operations) {
         assert.deepEqual(await stable.call(operation.agent, operation.tool, operation.args, true), operation.result)
         const stateID = createHash("sha256").update(root + "\0" + (operation.agent === "investigador" ? stable.ids.investigador : stable.ids.planificador)).digest("hex")
@@ -207,7 +266,7 @@ test("servicio OpenCode real: los cinco publicadores guardan antes y después de
       const correction = await stable.call("planificador", deliveryCall.tool, { ...deliveryCall.args, operacion_id: "correccion-1",
         historias: [{ clave: "APP-1", contenido: "Corrección completa", incidencias: "Ninguna" }] }, true)
       assert.notEqual(correction.artefacto_id, deliveryCall.result.artefacto_id)
-      assert.match(correction.rutas["APP-1.md"], /entrega-02/)
+      assert.match(correction.rutas["APP-1.md"], /entrega-04/)
       assert.equal(await readFile(correction.rutas["APP-1-incidencias.md"], "utf8"), "Ninguna")
       for (const [path, bytes] of snapshots) assert.deepEqual(await readFile(path), bytes)
 

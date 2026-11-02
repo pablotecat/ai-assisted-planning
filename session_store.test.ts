@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { createHash, randomUUID } from "node:crypto"
 import { hostname, tmpdir } from "node:os"
 import { dirname, join, relative } from "node:path"
@@ -8,7 +8,9 @@ import { once } from "node:events"
 import { pathToFileURL } from "node:url"
 import test from "node:test"
 import { readAgentSettings } from "./tools/agent_settings.ts"
-import { manifest, publishReview, publishSession, type Identity } from "./tools/session_store.ts"
+import { manifest, publishReview, publishSession, type FileOrigin, type Identity, type Verdict } from "./tools/session_store.ts"
+import { fileInput } from "./tools/define_tool.ts"
+import planningPublisher from "./tools/write_planning_deliverables.ts"
 
 test("arquitecto publica planes versionados y respeta su interruptor de guardado", async () => {
   const dir = await mkdtemp(join(tmpdir(), "planning-architecture-session-"))
@@ -562,5 +564,264 @@ test("guardado desactivado no crea control y no recupera ni modifica operaciones
     assert.deepEqual(await publishSession(f.input, f.opts), { guardado: false })
     assert.deepEqual(await readFile(f.stateFile), before)
     assert.equal(await readFile(saved.rutas["APP-1.md"], "utf8"), f.input.files["APP-1.md"])
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+function originFor(state: any, artifactID: string, name: string): FileOrigin {
+  const artifact = state.artifacts[artifactID]
+  const file = artifact.files.find((file: any) => file.path.endsWith(`/${name}`))
+  assert.ok(file, name)
+  return { artefacto_id: artifact.id, archivo: file.path, sha256: file.sha256 }
+}
+
+test("promoción completa: cinco archivos idénticos, procedencia, reintento y exclusión literal por archivo", async () => {
+  const f = await transactionFixture()
+  try {
+    const input = { ...f.input, publicationType: "write_planning_deliverables", files: {
+      "APP-1.md": "\uFEFFHistoria 1\r\nñ\n", "APP-1-incidencias.md": "INC-1\r\n",
+      "APP-2.md": "Historia 2\n漢字", "APP-2-incidencias.md": "INC-2\n", "incidencias-globales.md": "Globales\r\n",
+    } }
+    const first = await publishSession(input, f.opts)
+    assert.ok(first.guardado)
+    const before = await f.state()
+    const files = Object.fromEntries(Object.keys(input.files).map(name => [name, originFor(before, first.artefacto_id, name)]))
+    for (const [name, origin] of Object.entries(files)) {
+      assert.equal(fileInput(undefined, origin), origin)
+      assert.throws(() => fileInput(input.files[name], origin), /exclusivamente/)
+    }
+    assert.throws(() => fileInput(), /exclusivamente/)
+    const promotedInput = { ...input, operationID: "promocion-1", files }
+    assert.ok(!JSON.stringify(promotedInput).includes("Historia 1"), "la petición no reemite el contenido")
+    const promoted = await publishSession(promotedInput, f.opts)
+    assert.ok(promoted.guardado)
+    assert.equal(Object.keys(promoted.rutas).length, 5)
+    const artifact = (await f.state()).artifacts[promoted.artefacto_id]
+    assert.equal(artifact.previous, first.artefacto_id)
+    assert.deepEqual(artifact.origin, { type: "promotion", files })
+    assert.equal(artifact.producerSessionID, "plan")
+    for (const name of Object.keys(input.files)) {
+      assert.deepEqual(await readFile(promoted.rutas[name]), await readFile(first.rutas[name]))
+      assert.notEqual((await stat(promoted.rutas[name], { bigint: true })).ino, (await stat(first.rutas[name], { bigint: true })).ino,
+        "destino independiente del origen")
+    }
+    assert.deepEqual(await publishSession(promotedInput, f.opts), promoted)
+    assert.deepEqual((await f.state()).artifacts[first.artefacto_id], before.artifacts[first.artefacto_id])
+    const incomplete = { "APP-1.md": files["APP-1.md"], "APP-1-incidencias.md": files["APP-1-incidencias.md"],
+      "incidencias-globales.md": files["incidencias-globales.md"] }
+    await assert.rejects(publishSession({ ...promotedInput, operationID: "incompleta", files: incomplete }, f.opts), /todos los archivos/)
+    // The real planner also refuses a missing incidents/global file before publication.
+    const context = { sessionID: "plan", messageID: "mensaje", agent: "planificador", resolver: f.opts.get }
+    await assert.rejects(planningPublisher.execute({ historias: [{ clave: "APP-1", origen_contenido: files["APP-1.md"] }],
+      origen_incidencias_globales: files["incidencias-globales.md"] }, context), /exclusivamente/)
+    await assert.rejects(planningPublisher.execute({ historias: [{ clave: "APP-1", contenido: "literal",
+      origen_contenido: files["APP-1.md"], incidencias: "Ninguna" }], incidencias_globales: "Ninguna" }, context), /exclusivamente/)
+    await assert.rejects(planningPublisher.execute({ historias: [{ clave: "APP-1", contenido: "literal", incidencias: "Ninguna" },
+      { clave: "APP-1-incidencias", contenido: "literal", incidencias: "Ninguna" }], incidencias_globales: "Ninguna" }, context), /nombres.*únicos/)
+    assert.equal(Object.keys((await f.state()).artifacts).length, 2)
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+test("promoción: hash, origen ajeno, traversal, symlink y productor distinto se rechazan antes de preparar", async () => {
+  const f = await transactionFixture()
+  try {
+    const first = await publishSession(f.input, f.opts)
+    assert.ok(first.guardado)
+    const reference = originFor(await f.state(), first.artefacto_id, "APP-1.md")
+    const promotion = { ...f.input, operationID: "promocion", files: { "APP-1.md": reference } }
+    const before = await readFile(f.stateFile)
+    for (const [origin, error] of [
+      [{ ...reference, sha256: "0".repeat(64) }, /Hash de origen incorrecto/],
+      [{ ...reference, artefacto_id: "ajeno" }, /origen ajeno/],
+      [{ ...reference, archivo: "../../fuera.md" }, /no registrado/],
+      [{ ...reference, archivo: first.rutas["APP-1.md"] }, /no registrado/],
+    ] as const) await assert.rejects(publishSession({ ...promotion, files: { "APP-1.md": origin } }, f.opts), error)
+    await assert.rejects(publishSession({ ...promotion, sessionID: "other", agent: "refinador" }, f.opts), /Productor de origen no autorizado/)
+    f.nodes.plan.agent = "arquitecto"
+    await assert.rejects(publishSession({ ...promotion, agent: "arquitecto" }, f.opts), /Propietario de carpeta diferente/)
+    f.nodes.plan.agent = "planificador"
+    f.nodes.root2 = { ...f.nodes.plan, id: "root2" }
+    const foreign = await publishSession({ ...f.input, sessionID: "root2", operationID: "otra-raiz" }, f.opts)
+    assert.ok(foreign.guardado)
+    await assert.rejects(publishSession({ ...promotion, files: { "APP-1.md": { ...reference, artefacto_id: foreign.artefacto_id } } }, f.opts), /origen ajeno/)
+    const folder = dirname(first.rutas["APP-1.md"])
+    await rename(folder, `${folder}-real`)
+    await symlink(`${folder}-real`, folder, process.platform === "win32" ? "junction" : "dir")
+    await assert.rejects(publishSession(promotion, f.opts), /enlazada/)
+    await rm(folder)
+    await rename(`${folder}-real`, folder)
+    assert.deepEqual(await readFile(f.stateFile), before)
+    assert.equal(await readFile(first.rutas["APP-1.md"], "utf8"), f.input.files["APP-1.md"])
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+test("Planificador promueve archivos finales del Refinador directo, no un borrador ni un hermano ajeno", async () => {
+  const f = await transactionFixture()
+  try {
+    const draft = await publishSession({ ...f.input, sessionID: "other", agent: "refinador", operationID: "finales",
+      files: { "APP-1.md": "Historia final", "APP-1-incidencias.md": "Trazabilidad", "borrador.md": "Contenedor" } }, f.opts)
+    assert.ok(draft.guardado)
+    const state = await f.state()
+    const artifact = state.artifacts[draft.artefacto_id]
+    const reference = (name: string) => ({ artefacto_id: artifact.id,
+      archivo: relative(draft.sesion, draft.rutas[name]).replace(/\\/g, "/"),
+      sha256: artifact.files.find((file: any) => file.path === relative(draft.sesion, draft.rutas[name]).replace(/\\/g, "/")).sha256 })
+    const input = { ...f.input, publicationType: "write_planning_deliverables", operationID: "promocion",
+      files: { "APP-1.md": reference("APP-1.md"), "APP-1-incidencias.md": reference("APP-1-incidencias.md"), "incidencias-globales.md": "Global" } }
+    const result = await publishSession(input, f.opts)
+    assert.ok(result.guardado)
+    assert.deepEqual(await readFile(result.rutas["APP-1.md"]), await readFile(draft.rutas["APP-1.md"]))
+    assert.equal((await f.state()).artifacts[result.artefacto_id].producerSessionID, "plan")
+    assert.deepEqual((await f.state()).artifacts[draft.artefacto_id], artifact)
+    await assert.rejects(publishSession({ ...input, operationID: "borrador", files: { ...input.files, "APP-1.md": reference("borrador.md") } }, f.opts), /archivos finales separados/)
+    f.nodes.sibling = { ...f.nodes.other, id: "sibling" }
+    await assert.rejects(publishSession({ ...input, sessionID: "sibling", agent: "refinador" }, f.opts), /origen no autorizado/)
+    f.nodes.other.agent = "revisor"
+    await assert.rejects(publishSession({ ...input, operationID: "productor-cambiado" }, f.opts), /Productor del origen distinto/)
+    f.nodes.other.agent = "refinador"
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+function verdictFor(publication: { artefacto_id: string; hash_manifiesto: string }, partial = false): Verdict {
+  return { artefacto_id: publication.artefacto_id, hash_manifiesto: publication.hash_manifiesto,
+    resultado: partial ? "parcial" : "favorable", alcance: ["CA-1", "CA-2"],
+    aprobados: partial ? ["CA-1"] : ["CA-1", "CA-2"], pendientes: partial ? ["CA-2"] : [], bloqueados: [] }
+}
+
+test("dictamen estructurado solo del Revisor del productor y de la entrega/hash exactos", async () => {
+  const f = await transactionFixture()
+  try {
+    const first = await publishSession(f.input, f.opts)
+    assert.ok(first.guardado)
+    const verdict = verdictFor(first)
+    const input = { sessionID: "review", operationID: "revision", delivery: dirname(first.rutas["APP-1.md"]), sanity: "Informe favorable", verdict }
+    const before = await readFile(f.stateFile)
+    f.nodes.stranger = { ...f.nodes.review, id: "stranger", parentID: "other" }
+    for (const id of ["plan", "other", "stranger"]) await assert.rejects(publishReview({ ...input, sessionID: id }, f.opts), /Revisor delegado|Productor sin carpeta/)
+    for (const invalid of [{ ...verdict, artefacto_id: "ajeno" }, { ...verdict, hash_manifiesto: "0".repeat(64) }])
+      await assert.rejects(publishReview({ ...input, verdict: invalid }, f.opts), /entrega\/hash/)
+    await assert.rejects(publishReview({ ...input, verdict: { ...verdict, pendientes: ["CA-2"] } }, f.opts), /resultado único/)
+    await assert.rejects(publishReview({ ...input, verdict: { ...verdictFor(first, true), resultado: "favorable" } }, f.opts), /aprobación completa/)
+    assert.deepEqual(await readFile(f.stateFile), before)
+    const result = await publishReview(input, { ...f.opts, checkpoint: async phase => {
+      if (phase === "prepared" || phase.startsWith("file:") || phase === "materialized") {
+        assert.deepEqual((await f.state()).reviews, {}, "no hay dictamen antes de confirmar el informe")
+        assert.equal(Object.values<any>((await f.state()).versions)[0].approved, undefined)
+      }
+    } })
+    assert.ok(result.guardado)
+    const state = await f.state()
+    assert.equal(await readFile(result.rutas["sanity-check.md"], "utf8"), input.sanity)
+    assert.deepEqual(state.reviews[result.artefacto_id], { artifactID: first.artefacto_id, manifestHash: first.hash_manifiesto,
+      reviewerSessionID: "review", reportArtifactID: result.artefacto_id,
+      reports: [relative(first.sesion, result.rutas["sanity-check.md"]).replace(/\\/g, "/")], verdict })
+    assert.deepEqual(await publishReview(input, f.opts), result)
+    await assert.rejects(publishReview({ ...input, verdict: verdictFor(first, true) }, f.opts), /contenido distinto/)
+    assert.equal(Object.values<any>(state.versions)[0].approved, first.artefacto_id)
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+test("versiones: revisión tardía parcial de v1 no revisa v2; promoción no hereda aprobación", async () => {
+  const f = await transactionFixture()
+  try {
+    const v1 = await publishSession(f.input, f.opts)
+    const v2 = await publishSession({ ...f.input, operationID: "v2", files: { ...f.input.files, "APP-1.md": "Versión 2" } }, f.opts)
+    assert.ok(v1.guardado && v2.guardado)
+    const before = (await f.state()).artifacts[v1.artefacto_id]
+    const partial = await publishReview({ sessionID: "review", operationID: "tardia", delivery: dirname(v1.rutas["APP-1.md"]),
+      sanity: "CA-1 aprobado; CA-2 pendiente", verdict: verdictFor(v1, true) }, f.opts)
+    assert.ok(partial.guardado)
+    let version = Object.values<any>((await f.state()).versions)[0]
+    assert.equal(version.published, v2.artefacto_id)
+    assert.equal(version.reviewed, v1.artefacto_id)
+    assert.equal(version.approved, undefined)
+    assert.deepEqual((await f.state()).artifacts[v1.artefacto_id], before)
+    const full = await publishReview({ sessionID: "review", operationID: "v2-revisada", delivery: dirname(v2.rutas["APP-1.md"]),
+      sanity: "Aprobación completa de v2", verdict: verdictFor(v2) }, f.opts)
+    assert.ok(full.guardado)
+    const state = await f.state()
+    const promoted = await publishSession({ ...f.input, operationID: "v3", files: Object.fromEntries(Object.keys(f.input.files)
+      .map(name => [name, originFor(state, v2.artefacto_id, name)])) }, f.opts)
+    assert.ok(promoted.guardado)
+    version = Object.values<any>((await f.state()).versions)[0]
+    assert.equal(version.published, promoted.artefacto_id)
+    assert.equal(version.reviewed, v2.artefacto_id)
+    assert.equal(version.approved, v2.artefacto_id)
+    assert.ok(!Object.values<any>((await f.state()).reviews).some(review => review.artifactID === promoted.artefacto_id))
+    const index = await readFile(join(v1.sesion, "indice.md"), "utf8")
+    assert.match(index, /aprobación parcial; sin aprobación completa/)
+    assert.match(index, /aprobada completa \(publicación\)/)
+    assert.match(index, /pendiente de revisión/)
+    assert.match(index, /no acredita integración global/)
+    for (const match of index.matchAll(/\]\(\.\/([^)]*)\)/g)) assert.ok(await stat(join(v1.sesion, decodeURI(match[1]))), match[1])
+    for (const result of [v1, v2, promoted]) {
+      const artifact = (await f.state()).artifacts[result.artefacto_id]
+      assert.equal(manifest(Object.fromEntries(await Promise.all(artifact.files.map(async (file: any) =>
+        [file.path, await readFile(join(result.sesion, file.path))])))).hash, result.hash_manifiesto)
+    }
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+test("Revisor: fallo o guardado desactivado no registra dictamen; revisión narrativa nunca infiere aprobación", async () => {
+  for (const phase of ["prepared", "file:sanity-check.md", "materialized"]) {
+    const f = await transactionFixture()
+    try {
+      const first = await publishSession(f.input, f.opts)
+      assert.ok(first.guardado)
+      const input = { sessionID: "review", operationID: "revision", delivery: dirname(first.rutas["APP-1.md"]), sanity: "APROBADO", verdict: verdictFor(first) }
+      await assert.rejects(publishReview(input, { ...f.opts, checkpoint: point => { if (point === phase) throw new Error("Fallo guardado") } }), /Fallo guardado/)
+      assert.deepEqual((await f.state()).reviews, {})
+      assert.equal(Object.values<any>((await f.state()).versions)[0].reviewed, undefined)
+      const settings = await readAgentSettings(f.opts.settingsPath)
+      settings.agentes.revisor.guardarEntregablesEnSesion = false
+      await writeFile(f.opts.settingsPath, JSON.stringify(settings))
+      const before = await readFile(f.stateFile)
+      assert.deepEqual(await publishReview(input, f.opts), { guardado: false })
+      assert.deepEqual(await readFile(f.stateFile), before)
+      settings.agentes.revisor.guardarEntregablesEnSesion = true
+      await writeFile(f.opts.settingsPath, JSON.stringify(settings))
+      const recovered = await publishReview(input, f.opts)
+      assert.ok(recovered.guardado)
+      assert.equal((await f.state()).reviews[recovered.artefacto_id].artifactID, first.artefacto_id)
+    } finally { await rm(f.dir, { recursive: true, force: true }) }
+  }
+  const f = await transactionFixture()
+  try {
+    const first = await publishSession(f.input, f.opts)
+    assert.ok(first.guardado)
+    const blocked = join(dirname(first.rutas["APP-1.md"]), "sanity-check.md")
+    await mkdir(blocked)
+    await assert.rejects(publishReview({ sessionID: "review", delivery: dirname(first.rutas["APP-1.md"]),
+      sanity: "Informe", verdict: verdictFor(first) }, f.opts), /Archivos no registrados/)
+    assert.deepEqual((await f.state()).reviews, {})
+    assert.equal(Object.values<any>((await f.state()).versions)[0].approved, undefined)
+    await rm(blocked, { recursive: true })
+    const reviewed = await publishReview({ sessionID: "review", delivery: dirname(first.rutas["APP-1.md"]), sanity: "APROBADO completamente, favorable" }, f.opts)
+    assert.ok(reviewed.guardado)
+    assert.deepEqual((await f.state()).reviews, {})
+    assert.equal(Object.values<any>((await f.state()).versions)[0].reviewed, first.artefacto_id)
+    assert.equal(Object.values<any>((await f.state()).versions)[0].approved, undefined)
+    assert.match(await readFile(join(first.sesion, "indice.md"), "utf8"), /revisión narrativa; sin aprobación estructurada/)
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+test("control S04: el digest literal y resultado confirmado anterior se recuperan sin reinterpretarlos", async () => {
+  const f = await transactionFixture()
+  try {
+    const first = await publishSession(f.input, f.opts)
+    assert.ok(first.guardado)
+    const state = await f.state()
+    delete state.reviews
+    delete state.versions
+    const operation = Object.values<any>(state.operations)[0]
+    delete operation.result.archivos
+    const oldDigest = createHash("sha256").update(JSON.stringify({ type: operation.type, topic: f.input.topic,
+      group: f.input.group, delivery: null, files: Object.keys(f.input.files).sort().map(name => [name, f.input.files[name]]),
+      sources: [], decisions: [], keys: [] })).digest("hex")
+    assert.equal(operation.digest, oldDigest, "misma normalización literal de S04")
+    await writeFile(f.stateFile, JSON.stringify(state))
+    const before = await readFile(f.stateFile)
+    assert.deepEqual(await publishSession(f.input, f.opts), operation.result)
+    assert.deepEqual(await readFile(f.stateFile), before)
+    assert.equal((await publishSession(f.input, f.opts) as any).archivos, undefined)
   } finally { await rm(f.dir, { recursive: true, force: true }) }
 })

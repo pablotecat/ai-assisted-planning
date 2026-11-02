@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { link, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises"
 import { hostname } from "node:os"
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path"
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { readAgentSettings, sessionRoot, type AgentName } from "./agent_settings.ts"
 
 export type Identity = { id: string; parentID?: string; agent: string; title: string; created: number; directory: string }
@@ -23,22 +23,30 @@ const childOf: Record<AgentName, AgentName[]> = {
 }
 type Entry = { parent?: string; agent: AgentName; folder: string }
 export type ManifestFile = { path: string; sha256: string; bytes: number }
+export type FileOrigin = { artefacto_id: string; archivo: string; sha256: string }
+type FileInput = string | FileOrigin
+export type Verdict = { artefacto_id: string; hash_manifiesto: string; resultado: "favorable" | "parcial" | "con_hallazgos";
+  alcance: string[]; aprobados: string[]; pendientes: string[]; bloqueados: string[] }
+type Review = { artifactID: string; manifestHash: string; reviewerSessionID: string; reportArtifactID: string;
+  reports: string[]; verdict: Verdict }
+type Version = { producerSessionID: string; type: string; published: string; reviewed?: string; approved?: string }
 export type Artifact = {
   id: string; rootSessionID: string; producerSessionID: string; agent: string; type: string;
   files: ManifestFile[]; manifestHash: string; deliveries: string[]; directory?: string;
-  previous?: string; origin: { type: "literal"; delivery?: string }
+  previous?: string; origin: { type: "literal" | "promotion"; delivery?: string; files?: Record<string, FileOrigin> }
 }
 type Saved = { guardado: true; rutas: Record<string, string>; sesion: string;
-  artefacto_id: string; hash_manifiesto: string; operacion_id: string }
+  artefacto_id: string; hash_manifiesto: string; operacion_id: string; archivos?: ManifestFile[] }
 type Operation = {
   id: string; logicalID: string; type: string; producerSessionID: string; agent: string; digest: string;
   phase: "prepared" | "materialized" | "confirmed"; artifact: Artifact;
   paths: Record<string, string>; stage: string; directoryIdentity?: { dev: string; ino: string };
-  sources: string[]; decisions: string[]; keys: string[]; result?: Saved
+  sources: string[]; decisions: string[]; keys: string[]; result?: Saved; review?: Review
 }
 type State = { root: string; entries: Record<string, Entry>; deliveries: string[]; sources: string[];
   decisions: string[]; keys: string[]; schemaVersion: 1;
-  artifacts: Record<string, Artifact>; operations: Record<string, Operation> }
+  artifacts: Record<string, Artifact>; operations: Record<string, Operation>;
+  reviews: Record<string, Review>; versions: Record<string, Version> }
 type Options = { get: Resolver; root?: string; settingsPath?: string;
   // Internal fault seam, never exposed in a tool's schema.
   checkpoint?: (phase: string) => void | Promise<void> }
@@ -223,7 +231,7 @@ async function loadState(stateDir: string): Promise<State> {
   if (typeof state.root !== "string" || basename(state.root) !== state.root || ["", ".", ".."].includes(state.root) ||
       !state.entries || !Array.isArray(state.deliveries)) throw new Error("Raíz de sesión inválida")
   return { ...state, schemaVersion: 1, sources: state.sources ?? [], decisions: state.decisions ?? [], keys: state.keys ?? [],
-    artifacts: state.artifacts ?? {}, operations: state.operations ?? {} }
+    artifacts: state.artifacts ?? {}, operations: state.operations ?? {}, reviews: state.reviews ?? {}, versions: state.versions ?? {} }
 }
 
 async function sessionDirectory(root: string, state: State) {
@@ -244,6 +252,7 @@ async function checkedFile(root: string, path: string) {
 
 // Verification never silently recomputes the registered identity after an external edit.
 async function verifyArtifact(sessionDir: string, artifact: Artifact, state: State, pending?: Artifact) {
+  if (hash(JSON.stringify(artifact.files)) !== artifact.manifestHash) throw new Error("Manifiesto del artefacto no verificable")
   for (const file of artifact.files) {
     const path = join(sessionDir, file.path)
     await checkedFile(sessionDir, path)
@@ -266,11 +275,84 @@ async function verifyArtifact(sessionDir: string, artifact: Artifact, state: Sta
   }
 }
 
+function checkedVerdict(value: Verdict): Verdict {
+  if (!["favorable", "parcial", "con_hallazgos"].includes(value.resultado) || typeof value.artefacto_id !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.hash_manifiesto)) throw new Error("Dictamen estructurado inválido")
+  for (const field of ["alcance", "aprobados", "pendientes", "bloqueados"] as const)
+    if (!Array.isArray(value[field]) || value[field].some(item => typeof item !== "string" || !item.trim()) || new Set(value[field]).size !== value[field].length)
+      throw new Error("Alcance y resultados del dictamen inválidos")
+  const results = [...value.aprobados, ...value.pendientes, ...value.bloqueados]
+  if (!value.alcance.length || new Set(results).size !== results.length || results.length !== value.alcance.length ||
+      results.some(item => !value.alcance.includes(item))) throw new Error("Cada elemento del alcance necesita un resultado único")
+  if (value.resultado === "favorable" && (value.pendientes.length || value.bloqueados.length || value.aprobados.length !== value.alcance.length))
+    throw new Error("Un dictamen favorable requiere aprobación completa del alcance")
+  if (value.resultado === "parcial" && (!value.aprobados.length || value.aprobados.length === value.alcance.length))
+    throw new Error("Un dictamen parcial requiere aprobados y elementos pendientes o bloqueados")
+  return { artefacto_id: value.artefacto_id, hash_manifiesto: value.hash_manifiesto, resultado: value.resultado,
+    alcance: value.alcance, aprobados: value.aprobados, pendientes: value.pendientes, bloqueados: value.bloqueados }
+}
+
+function versionRecords(state: State) {
+  const versions: Record<string, Version> = {}
+  for (const artifact of Object.values(state.artifacts)) {
+    if (artifact.agent !== "revisor") {
+      const key = hash(JSON.stringify([artifact.producerSessionID, artifact.type]))
+      versions[key] = { ...versions[key], producerSessionID: artifact.producerSessionID, type: artifact.type, published: artifact.id }
+    } else {
+      const target = Object.values(state.artifacts).find(a => a.deliveries.includes(artifact.origin.delivery ?? ""))
+      if (!target) continue // Narrative legacy reviews do not invent an artifact identity.
+      const key = hash(JSON.stringify([target.producerSessionID, target.type]))
+      versions[key].reviewed = target.id
+      if (state.reviews[artifact.id]?.verdict.resultado === "favorable") versions[key].approved = target.id
+    }
+  }
+  return versions
+}
+
 async function projectIndex(state: State, sessionDir: string, stateDir: string, topic: string, options: Options) {
+  const linkTo = (path: string) => `[${path}](./${encodeURI(path)})`
+  for (const artifact of Object.values(state.artifacts)) await verifyArtifact(sessionDir, artifact, state)
+  const legacy: string[] = []
+  for (const delivery of state.deliveries) {
+    const path = join(sessionDir, delivery)
+    within(sessionDir, path)
+    await checkExistingAncestors(path)
+    const stat = await lstat(path)
+    if (!stat.isDirectory() && !stat.isFile()) throw new Error("Entrega indexada no verificable")
+    if (!Object.values(state.artifacts).some(artifact => artifact.deliveries.includes(delivery))) {
+      legacy.push(`- ${linkTo(delivery)}: historial anterior; sin aprobación estructurada.`)
+      const prefix = stat.isDirectory() ? "" : `${basename(path, ".md")}-`
+      const folder = stat.isDirectory() ? path : dirname(path)
+      for (const name of [`${prefix}sanity-check.md`, `${prefix}disputa.md`]) {
+        const report = join(folder, name)
+        try {
+          await checkedFile(sessionDir, report)
+          legacy.push(`  - Informe narrativo: ${linkTo(portable(relative(sessionDir, report)))}`)
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error }
+      }
+    }
+  }
+  const versions = Object.values(versionRecords(state)).flatMap(version => [
+    `- ${version.producerSessionID} / ${version.type}: última publicada \`${version.published}\`; última revisada \`${version.reviewed ?? "ninguna"}\`; última aprobada completa \`${version.approved ?? "ninguna"}\`.`,
+  ])
+  const details = Object.values(state.artifacts).filter(a => a.agent !== "revisor").flatMap(artifact => {
+    const reports = Object.values(state.artifacts).filter(a => artifact.deliveries.includes(a.origin.delivery ?? ""))
+    const review = reports.map(report => state.reviews[report.id]).findLast(Boolean)
+    const status = review ? review.verdict.resultado === "favorable" ? "aprobada completa (publicación)" : review.verdict.resultado === "parcial" ? "aprobación parcial; sin aprobación completa" : "revisada con hallazgos; sin aprobación completa"
+      : reports.length ? "revisión narrativa; sin aprobación estructurada" : "pendiente de revisión"
+    return [`### ${artifact.id}`, `- Productor: ${artifact.agent} / ${artifact.producerSessionID}; estado: **${status}**.`,
+      `- Hash del productor: \`${artifact.manifestHash}\`; versión anterior: \`${artifact.previous ?? "ninguna"}\`.`,
+      ...artifact.files.map(file => `- Archivo: ${linkTo(file.path)}`),
+      ...reports.flatMap(report => report.files.map(file => `- Informe: ${linkTo(file.path)}`)),
+      ...(review ? [`- Alcance: ${review.verdict.alcance.join(", ")}`, `- Aprobados: ${review.verdict.aprobados.join(", ") || "ninguno"}`,
+        `- Pendientes: ${review.verdict.pendientes.join(", ") || "ninguno"}`, `- Bloqueados: ${review.verdict.bloqueados.join(", ") || "ninguno"}`] : []), ""]
+  })
   const index = ["# Encargo", "", `**Tema:** ${topic.replace(/[\r\n]+/g, " ")}`, `**Claves:** ${state.keys.join(", ") || "No indicadas"}`,
     "**Estado:** entregables publicados", "", "## Fuentes consultadas", ...state.sources.map(s => `- ${s}`),
     "", "## Decisiones relevantes", ...state.decisions.map(d => `- ${d}`),
-    "", "## Entregas", ...state.deliveries.map(d => `- [${d}](./${d})`), ""].join("\n")
+    "", "## Entregas", ...state.deliveries.map(d => `- ${linkTo(d)}`),
+    "", "## Versiones y revisiones", "La aprobación de publicación no acredita integración global de arquitectura.",
+    ...versions, "", ...details, ...(legacy.length ? ["## Historial anterior", ...legacy] : []), ""].join("\n")
   await options.checkpoint?.("index")
   const path = join(sessionDir, "indice.md")
   await checkExistingAncestors(path)
@@ -286,29 +368,70 @@ function operationKey(sessionID: string, type: string, logicalID: string) {
 }
 
 type Request = { sessionID: string; operationID: string; type: string; agent: string; topic: string;
-  files: Record<string, string>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string }
+  files: Record<string, FileInput>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string; verdict?: Verdict }
+
+async function resolveFiles(input: Request, state: State, sessionDir: string, nodes: Identity[], options: Options) {
+  const files: Record<string, string | Uint8Array> = {}
+  for (const [name, origin] of Object.entries(input.files)) {
+    if (typeof origin === "string") { files[name] = origin; continue }
+    const artifact = state.artifacts[origin.artefacto_id]
+    if (!artifact || artifact.rootSessionID !== nodes[0].id || artifact.agent === "revisor")
+      throw new Error("Artefacto de origen ajeno o no autorizado")
+    const sourceNodes = await chain(artifact.producerSessionID, undefined, options.get)
+    const source = sourceNodes.at(-1)!
+    if (sourceNodes[0].id !== nodes[0].id || source.directory !== nodes[0].directory || source.agent !== artifact.agent ||
+        sourceNodes.some(node => !state.entries[node.id] || state.entries[node.id].parent !== node.parentID || state.entries[node.id].agent !== node.agent))
+      throw new Error("Productor del origen distinto del registro verificado")
+    if (source.id !== input.sessionID && !(input.agent === "planificador" && source.agent === "refinador" && source.parentID === input.sessionID))
+      throw new Error("Productor de origen no autorizado para esta delegación")
+    const operation = Object.values(state.operations).find(op => op.phase === "confirmed" && op.artifact.id === artifact.id)
+    const file = artifact.files.find(file => file.path === origin.archivo)
+    if (!operation || !file) throw new Error("Archivo de origen no registrado")
+    if (file.sha256 !== origin.sha256) throw new Error("Hash de origen incorrecto")
+    await verifyArtifact(sessionDir, artifact, state)
+    const path = join(sessionDir, file.path)
+    const sourceName = Object.keys(operation.paths).find(key => portable(relative(sessionDir, operation.paths[key])) === file.path)
+    if (input.type === "write_planning_deliverables" && sourceName !== name)
+      throw new Error("La promoción de historias requiere archivos finales separados con su nombre; borrador.md no es una historia final")
+    if (artifact.type === "write_planning_deliverables" && Object.keys(operation.paths).some(key => !(key in input.files)))
+      throw new Error("La promoción debe conservar todos los archivos de la entrega del Planificador")
+    const bytes = await readFile(path)
+    if (hash(bytes) !== origin.sha256 || bytes.length !== file.bytes) throw new Error("Hash de origen incorrecto")
+    if (!bytes.toString("utf8").trim()) throw new Error("Entregables vacíos")
+    files[name] = bytes
+  }
+  return files
+}
+
 function requestDigest(input: Request) {
   return hash(JSON.stringify({ type: input.type, topic: input.topic, group: input.group ?? null, delivery: input.delivery ?? null,
-    files: Object.keys(input.files).sort().map(name => [name, input.files[name]]),
-    sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [] }))
+    files: Object.keys(input.files).sort().map(name => { const file = input.files[name]; return [name,
+      typeof file === "string" ? file : { artefacto_id: file.artefacto_id, archivo: file.archivo, sha256: file.sha256 }] }),
+    sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [],
+    ...(input.verdict ? { verdict: input.verdict } : {}) }))
 }
 
 async function prepare(state: State, stateDir: string, sessionDir: string, nodes: Identity[], input: Request, key: string,
-  paths: Record<string, string>, deliveries: string[], targetDirectory?: string) {
+  paths: Record<string, string>, deliveries: string[], targetDirectory?: string,
+  files: Record<string, string | Uint8Array> = input.files as Record<string, string>) {
   const id = randomUUID()
   const stage = join(stateDir, id)
   await mkdir(stage)
-  const content = Object.fromEntries(Object.entries(paths).map(([name, path]) => [portable(relative(sessionDir, path)), input.files[name]]))
+  const content = Object.fromEntries(Object.entries(paths).map(([name, path]) => [portable(relative(sessionDir, path)), files[name]]))
   const identity = manifest(content)
   const previous = Object.values(state.artifacts).findLast(a => a.producerSessionID === input.sessionID && a.type === input.type)
+  const origins = Object.fromEntries(Object.entries(input.files).filter((entry): entry is [string, FileOrigin] => typeof entry[1] !== "string"))
   const artifact: Artifact = { id: randomUUID(), rootSessionID: nodes[0].id, producerSessionID: input.sessionID,
     agent: input.agent, type: input.type, files: identity.files, manifestHash: identity.hash, deliveries,
     ...(targetDirectory ? { directory: portable(relative(sessionDir, targetDirectory)) } : {}),
-    ...(previous ? { previous: previous.id } : {}), origin: { type: "literal", ...(input.delivery ? { delivery: input.delivery } : {}) } }
+    ...(previous ? { previous: previous.id } : {}), origin: { type: Object.keys(origins).length ? "promotion" : "literal",
+      ...(Object.keys(origins).length ? { files: origins } : {}), ...(input.delivery ? { delivery: input.delivery } : {}) } }
   const operation: Operation = { id, logicalID: input.operationID, type: input.type, producerSessionID: input.sessionID,
     agent: input.agent, digest: requestDigest(input), phase: "prepared", artifact, paths, stage: id,
-    sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [] }
-  for (const [name, content] of Object.entries(input.files)) await writeFile(join(stage, name), content, { flag: "wx" })
+    sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [],
+    ...(input.verdict ? { review: { artifactID: input.verdict.artefacto_id, manifestHash: input.verdict.hash_manifiesto,
+      reviewerSessionID: input.sessionID, reportArtifactID: artifact.id, reports: identity.files.map(file => file.path), verdict: input.verdict } } : {}) }
+  for (const [name, content] of Object.entries(files)) await writeFile(join(stage, name), content, { flag: "wx" })
   state.operations[key] = operation
   await saveJson(join(stateDir, "state.json"), state)
   return operation
@@ -373,8 +496,10 @@ async function commit(state: State, stateDir: string, sessionDir: string, operat
     }
     operation.result = { guardado: true, rutas: operation.paths, sesion: sessionDir,
       artefacto_id: operation.artifact.id, hash_manifiesto: operation.artifact.manifestHash,
-      operacion_id: operation.logicalID }
+      operacion_id: operation.logicalID, archivos: operation.artifact.files }
     state.artifacts[operation.artifact.id] = operation.artifact
+    if (operation.review) state.reviews[operation.artifact.id] = operation.review
+    state.versions = versionRecords(state)
     operation.phase = "confirmed"
     await saveJson(join(stateDir, "state.json"), state)
     await options.checkpoint?.("confirmed")
@@ -395,11 +520,14 @@ export type Publication = { guardado: false } | (Saved & { indice?: { actualizad
 // This contract has no model-supplied directory: only a trusted harness resolver assigns ownership.
 export async function publishSession(input: {
   sessionID: string; messageID?: string; agent: string; topic: string;
-  files: Record<string, string>; group?: string; sources?: string[]; decisions?: string[]; keys?: string[];
+  files: Record<string, FileInput>; group?: string; sources?: string[]; decisions?: string[]; keys?: string[];
   operationID?: string; publicationType?: string
 }, options: Options): Promise<Publication> {
   const names = Object.keys(input.files)
-  if (!names.length || names.some((name) => !input.files[name]?.trim())) throw new Error("Entregables vacíos")
+  if (!names.length || names.some(name => typeof input.files[name] === "string" && !input.files[name].trim())) throw new Error("Entregables vacíos")
+  for (const file of Object.values(input.files)) if (typeof file !== "string" &&
+    (!file || typeof file.artefacto_id !== "string" || typeof file.archivo !== "string" || !/^[a-f0-9]{64}$/.test(file.sha256)))
+    throw new Error("Origen de archivo inválido")
   names.forEach(safeName)
   if (input.group && input.group !== "Originales" && !/^[a-z][a-z0-9-]*$/.test(input.group)) throw new Error("Grupo no permitido")
   if (input.group === "Originales" && input.agent !== "planificador") throw new Error("Solo el planificador puede publicar originales")
@@ -443,7 +571,8 @@ export async function publishSession(input: {
           rootFolder = `${rootName(nodes[0].created, agentNames[nodes[0].agent], nodes[0].title || input.topic)}-${String(n + 1).padStart(2, "0")}`
         }
       }
-      state = { root: rootFolder, entries: {}, deliveries: [], sources: [], decisions: [], keys: [], schemaVersion: 1, artifacts: {}, operations: {} }
+      state = { root: rootFolder, entries: {}, deliveries: [], sources: [], decisions: [], keys: [], schemaVersion: 1,
+        artifacts: {}, operations: {}, reviews: {}, versions: {} }
       await saveJson(stateFile, state)
     }
     const sessionDir = await sessionDirectory(root, state)
@@ -460,6 +589,7 @@ export async function publishSession(input: {
     // A different operation cannot step over an interrupted reservation.
     if (Object.values(state.operations).some(operation => operation.phase !== "confirmed"))
       throw new Error("Publicación interrumpida pendiente; recupera la misma operacion_id antes de iniciar otra")
+    const files = await resolveFiles(request, state, sessionDir, nodes, options)
     for (let i = 0; i < nodes.length; i++) {
       const folder = folderFor(state, nodes, i)
       within(sessionDir, join(sessionDir, folder))
@@ -484,14 +614,14 @@ export async function publishSession(input: {
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error }
     }
     const deliveries = (input.group ? [target] : Object.values(paths)).map(path => portable(relative(sessionDir, path)))
-    const operation = await prepare(state, stateDir, sessionDir, nodes, request, key, paths, deliveries, input.group ? target : undefined)
+    const operation = await prepare(state, stateDir, sessionDir, nodes, request, key, paths, deliveries, input.group ? target : undefined, files)
     return finish(state, stateDir, sessionDir, operation, nodes[0].title || input.topic, options)
   })
 }
 
 // Append reviewer-authored reports to an existing, indexed delivery of its direct parent.
 export async function publishReview(input: {
-  sessionID: string; messageID?: string; delivery: string; sanity?: string; dispute?: string; operationID?: string
+  sessionID: string; messageID?: string; delivery: string; sanity?: string; dispute?: string; operationID?: string; verdict?: Verdict
 }, options: Options): Promise<Publication> {
   if (!input.sanity?.trim() && !input.dispute?.trim()) throw new Error("Documento de revisión vacío")
   const nodes = await chain(input.sessionID, input.messageID, options.get)
@@ -527,6 +657,11 @@ export async function publishReview(input: {
     const reference = relative(sessionDir, target).replace(/\\/g, "/")
     if (!state.deliveries.includes(reference)) throw new Error("Entrega no registrada")
     const artifact = Object.values(state.artifacts).find(a => a.deliveries.includes(reference))
+    const verdict = input.verdict ? checkedVerdict(input.verdict) : undefined
+    if (verdict && (!artifact || artifact.producerSessionID !== producer.id || artifact.agent !== producer.agent ||
+        artifact.rootSessionID !== nodes[0].id || artifact.id !== verdict.artefacto_id || artifact.manifestHash !== verdict.hash_manifiesto))
+      throw new Error("El dictamen no corresponde a la entrega/hash del productor autorizado")
+    if (verdict && !input.sanity?.trim()) throw new Error("El dictamen estructurado requiere guardar el informe de sanidad en la misma operación")
     if (artifact) await verifyArtifact(sessionDir, artifact, state, existing?.phase !== "confirmed" ? existing?.artifact : undefined)
     await checkExistingAncestors(target)
     const stat = await lstat(target)
@@ -544,7 +679,7 @@ export async function publishReview(input: {
     const paths: Record<string, string> = {}
     for (const [name] of files) paths[name] = join(folder, safeName(name))
     const request: Request = { sessionID: input.sessionID, operationID: logicalID, agent: reviewer.agent,
-      type: "write_review_documents", topic: reference, delivery: reference, files: Object.fromEntries(files) }
+      type: "write_review_documents", topic: reference, delivery: reference, files: Object.fromEntries(files), verdict }
     if (existing) {
       if (existing.digest !== requestDigest(request)) throw new Error("Identidad de operación reutilizada con contenido distinto")
       return finish(state, stateDir, sessionDir, existing, nodes[0].title, options)
