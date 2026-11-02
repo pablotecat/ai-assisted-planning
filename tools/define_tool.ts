@@ -19,6 +19,11 @@ export const operationID = tool.schema.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:
 export const workID = tool.schema.string().min(1).optional()
   .describe("ID local de session_work; vincula esta publicación al encargo/corpus asignado. No es un ID de OpenCode")
 
+export const partial = tool.schema.object({
+  proposito: tool.schema.string().trim().min(1), efecto: tool.schema.string().trim().min(1),
+  siguiente_accion: tool.schema.string().trim().min(1),
+}).strict().optional().describe("Entrega parcial explícita con dependencias activas; requiere encargo_id. Omitir exige integración de trabajos requeridos registrados")
+
 export const fileOrigin = tool.schema.object({
   artefacto_id: tool.schema.string().min(1),
   archivo: tool.schema.string().min(1).describe("Ruta relativa exacta del archivo en el manifiesto registrado; nunca ruta arbitraria"),

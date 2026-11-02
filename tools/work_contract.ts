@@ -3,12 +3,15 @@ import { tool } from "./define_tool.ts"
 const text = tool.schema.string().trim().min(1)
 const strings = tool.schema.array(text)
 export const workFields = {
-  action: tool.schema.enum(["create", "list", "get", "assign", "record", "review"]),
+  action: tool.schema.enum(["create", "list", "get", "assign", "record", "review", "confirm", "start", "result", "integrate", "block"]),
   encargo_id: text.optional(),
   padre_id: text.optional(),
   pregunta: text.optional(), criterios: strings.optional(),
   corpus: text.optional(), referencia: text.optional(),
   responsable_session_id: text.optional(),
+  requerido: tool.schema.boolean().optional(),
+  preparacion_message_id: text.optional(), ejecucion_id: text.optional(), resultado_message_id: text.optional(),
+  resultado_hash: text.regex(/^[a-f0-9]{64}$/).optional(), efecto: text.optional(), motivo: text.optional(),
   resultado: text.optional(), pendientes: strings.optional(), siguiente_accion: text.optional(),
   suficiencia: tool.schema.enum(["parcial", "completo"]).optional(),
   fuentes: strings.optional(), decisiones: strings.optional(),
@@ -20,7 +23,7 @@ const base = tool.schema.object(workFields)
 // Each action rejects irrelevant fields too: IDs and recipients are not ambient authority.
 export const workRequest = tool.schema.discriminatedUnion("action", [
   base.pick({ action: true, padre_id: true, pregunta: true, criterios: true, corpus: true, referencia: true,
-    responsable_session_id: true }).extend({ action: tool.schema.literal("create"), pregunta: text,
+    responsable_session_id: true, requerido: true }).extend({ action: tool.schema.literal("create"), pregunta: text,
     criterios: strings, corpus: text, referencia: text }).strict(),
   base.pick({ action: true }).extend({ action: tool.schema.literal("list") }).strict(),
   base.pick({ action: true, encargo_id: true }).extend({ action: tool.schema.literal("get"), encargo_id: text }).strict(),
@@ -32,6 +35,15 @@ export const workRequest = tool.schema.discriminatedUnion("action", [
     suficiencia: tool.schema.enum(["parcial", "completo"]) }).strict(),
   base.pick({ action: true, encargo_id: true, artefacto_id: true, revisor_session_id: true }).extend({ action: tool.schema.literal("review"),
     encargo_id: text, artefacto_id: text, revisor_session_id: text }).strict(),
+  base.pick({ action: true, encargo_id: true, pregunta: true, corpus: true, referencia: true, preparacion_message_id: true })
+    .required().extend({ action: tool.schema.literal("confirm") }).strict(),
+  base.pick({ action: true, encargo_id: true, ejecucion_id: true }).required().extend({ action: tool.schema.literal("start") }).strict(),
+  base.pick({ action: true, encargo_id: true, ejecucion_id: true, resultado_message_id: true }).required()
+    .extend({ action: tool.schema.literal("result"), artefacto_id: text.optional() }).strict(),
+  base.pick({ action: true, encargo_id: true, ejecucion_id: true, resultado_hash: true, efecto: true, siguiente_accion: true }).required()
+    .extend({ action: tool.schema.literal("integrate") }).strict(),
+  base.pick({ action: true, encargo_id: true, ejecucion_id: true, motivo: true, efecto: true, siguiente_accion: true }).required()
+    .extend({ action: tool.schema.literal("block") }).strict(),
 ])
 export type WorkRequest = ReturnType<typeof workRequest.parse>
 

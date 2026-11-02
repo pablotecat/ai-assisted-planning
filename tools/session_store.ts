@@ -4,9 +4,12 @@ import { hostname } from "node:os"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { readAgentSettings, sessionRoot, type AgentName } from "./agent_settings.ts"
 import { artifactRequest, workRequest, type ArtifactRequest, type WorkRequest } from "./work_contract.ts"
+import { changeExecution, checkWorkClosure, workMessages, type Execution, type NativeMessage, type Closure } from "./work_execution.ts"
 
 export type Identity = { id: string; parentID?: string; agent: string; title: string; created: number; directory: string }
-export type Resolver = (id: string, messageID?: string) => Promise<Identity>
+export type Resolver = ((id: string, messageID?: string) => Promise<Identity>) & {
+  messages?: (id: string) => Promise<NativeMessage[]>
+}
 
 const agentNames: Record<string, AgentName> = {
   arquitecto: "arquitecto",
@@ -34,7 +37,7 @@ type Version = { producerSessionID: string; type: string; published: string; rev
 export type Artifact = {
   id: string; rootSessionID: string; producerSessionID: string; agent: string; type: string;
   files: ManifestFile[]; manifestHash: string; deliveries: string[]; directory?: string;
-  workID?: string;
+  workID?: string; producerMessageID?: string; closure?: Closure;
   previous?: string; origin: { type: "literal" | "promotion"; delivery?: string; files?: Record<string, FileOrigin> }
 }
 type WorkEvent = { sessionID: string; messageID?: string; action: string; responsibleSessionID?: string;
@@ -43,9 +46,10 @@ type WorkEvent = { sessionID: string; messageID?: string; action: string; respon
   artefacto_id?: string; historial_revision?: { intentos_consumidos: number; limite: number; referencias: string[] } }
 export type Work = { id: string; rootSessionID: string; ownerSessionID: string; responsibleSessionID: string;
   parentID?: string; pregunta: string; criterios: string[]; corpus: string; referencia: string;
-  assignments: string[]; agents: Record<string, string>; events: WorkEvent[]; reviews: { sessionID: string; artifactID: string }[] }
+  assignments: string[]; agents: Record<string, string>; events: WorkEvent[]; reviews: { sessionID: string; artifactID: string }[];
+  required?: boolean; executions?: Execution[] }
 type Saved = { guardado: true; rutas: Record<string, string>; sesion: string;
-  artefacto_id: string; hash_manifiesto: string; operacion_id: string; archivos?: ManifestFile[] }
+  artefacto_id: string; hash_manifiesto: string; operacion_id: string; archivos?: ManifestFile[]; cierre?: Closure }
 type Operation = {
   id: string; logicalID: string; type: string; producerSessionID: string; agent: string; digest: string;
   phase: "prepared" | "materialized" | "confirmed"; artifact: Artifact;
@@ -405,8 +409,9 @@ function operationKey(sessionID: string, type: string, logicalID: string) {
   return hash(JSON.stringify([sessionID, type, logicalID]))
 }
 
-type Request = { sessionID: string; operationID: string; type: string; agent: string; topic: string;
-  files: Record<string, FileInput>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string; verdict?: Verdict; workID?: string }
+type Request = { sessionID: string; messageID?: string; operationID: string; type: string; agent: string; topic: string;
+  files: Record<string, FileInput>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string; verdict?: Verdict; workID?: string;
+  closure?: Closure; partial?: { proposito: string; efecto: string; siguiente_accion: string } }
 
 async function resolveFiles(input: Request, state: State, sessionDir: string, nodes: Identity[], options: Options) {
   const files: Record<string, string | Uint8Array> = {}
@@ -451,7 +456,8 @@ function requestDigest(input: Request) {
     files: Object.keys(input.files).sort().map(name => { const file = input.files[name]; return [name,
       typeof file === "string" ? file : { artefacto_id: file.artefacto_id, archivo: file.archivo, sha256: file.sha256 }] }),
     sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [],
-    ...(input.verdict ? { verdict: input.verdict } : {}), ...(input.workID ? { workID: input.workID } : {}) }))
+    ...(input.verdict ? { verdict: input.verdict } : {}), ...(input.workID ? { workID: input.workID } : {}),
+    ...(input.partial ? { partial: input.partial } : {}) }))
 }
 
 async function prepare(state: State, stateDir: string, sessionDir: string, nodes: Identity[], input: Request, key: string,
@@ -467,6 +473,7 @@ async function prepare(state: State, stateDir: string, sessionDir: string, nodes
   const artifact: Artifact = { id: randomUUID(), rootSessionID: nodes[0].id, producerSessionID: input.sessionID,
     agent: input.agent, type: input.type, files: identity.files, manifestHash: identity.hash, deliveries,
     ...(input.workID ? { workID: input.workID } : {}),
+    ...(input.messageID ? { producerMessageID: input.messageID } : {}), ...(input.closure ? { closure: input.closure } : {}),
     ...(targetDirectory ? { directory: portable(relative(sessionDir, targetDirectory)) } : {}),
     ...(previous ? { previous: previous.id } : {}), origin: { type: Object.keys(origins).length ? "promotion" : "literal",
       ...(Object.keys(origins).length ? { files: origins } : {}), ...(input.delivery ? { delivery: input.delivery } : {}) } }
@@ -540,7 +547,8 @@ async function commit(state: State, stateDir: string, sessionDir: string, operat
     }
     operation.result = { guardado: true, rutas: operation.paths, sesion: sessionDir,
       artefacto_id: operation.artifact.id, hash_manifiesto: operation.artifact.manifestHash,
-      operacion_id: operation.logicalID, archivos: operation.artifact.files }
+      operacion_id: operation.logicalID, archivos: operation.artifact.files,
+      ...(operation.artifact.closure ? { cierre: operation.artifact.closure } : {}) }
     state.artifacts[operation.artifact.id] = operation.artifact
     if (operation.review) state.reviews[operation.artifact.id] = operation.review
     state.versions = versionRecords(state)
@@ -565,9 +573,13 @@ export type Publication = { guardado: false } | (Saved & { indice?: { actualizad
 export async function publishSession(input: {
   sessionID: string; messageID?: string; agent: string; topic: string;
   files: Record<string, FileInput>; group?: string; sources?: string[]; decisions?: string[]; keys?: string[];
-  operationID?: string; publicationType?: string; workID?: string
+  operationID?: string; publicationType?: string; workID?: string;
+  partial?: { proposito: string; efecto: string; siguiente_accion: string }
 }, options: Options): Promise<Publication> {
   const names = Object.keys(input.files)
+  if (input.partial && (!input.workID || Object.values(input.partial).length !== 3 ||
+      [input.partial.proposito, input.partial.efecto, input.partial.siguiente_accion].some(value => typeof value !== "string" || !value.trim())))
+    throw new Error("Un parcial requiere encargo, propósito, efecto y siguiente acción")
   if (!names.length || names.some(name => typeof input.files[name] === "string" && !input.files[name].trim())) throw new Error("Entregables vacíos")
   for (const file of Object.values(input.files)) if (typeof file !== "string" &&
     (!file || typeof file.artefacto_id !== "string" || typeof file.archivo !== "string" || !/^[a-f0-9]{64}$/.test(file.sha256)))
@@ -614,8 +626,12 @@ export async function publishSession(input: {
     const existing = state.operations[key]
     if (existing) {
       if (existing.digest !== requestDigest(request)) throw new Error("Identidad de operación reutilizada con contenido distinto")
+      if (existing.phase !== "confirmed" && input.workID && input.group !== "Originales")
+        await workClosure(state, state.work[input.workID], nodes, options, sessionDir, input.partial)
       return finish(state, stateDir, sessionDir, existing, nodes[0].title || input.topic, options)
     }
+    if (input.workID && input.group !== "Originales")
+      request.closure = await workClosure(state, state.work[input.workID], nodes, options, sessionDir, input.partial)
     // A different operation cannot step over an interrupted reservation.
     if (Object.values(state.operations).some(operation => operation.phase !== "confirmed"))
       throw new Error("Publicación interrumpida pendiente; recupera la misma operacion_id antes de iniciar otra")
@@ -724,6 +740,21 @@ async function canReadArtifact(artifact: Artifact, work: Work, nodes: Identity[]
   return true
 }
 
+async function workClosure(state: State, work: Work, nodes: Identity[], options: Options, sessionDir: string,
+  partial?: { proposito: string; efecto: string; siguiente_accion: string }) {
+  const closure = await checkWorkClosure(work, Object.values(state.work), options.get, partial)
+  for (const dependency of closure.dependencias) {
+    const child = await authorizedWork(state, dependency.encargo_id, nodes, options)
+    const execution = child.executions?.at(-1), result = execution?.result
+    if (!result?.artifactID) continue
+    const artifact = state.artifacts[result.artifactID]
+    if (!artifact || artifact.manifestHash !== result.manifestHash || artifact.producerSessionID !== execution!.sessionID ||
+        !await canReadArtifact(artifact, child, nodes, state, options)) throw new Error("Artefacto del resultado integrado no verificable")
+    await verifyArtifact(sessionDir, artifact, state)
+  }
+  return closure
+}
+
 export async function sessionWork(raw: WorkRequest, actor: Actor, options: Options): Promise<unknown> {
   const input = workRequest.parse(raw)
   const nodes = await chain(actor.sessionID, actor.messageID, options.get)
@@ -767,13 +798,19 @@ export async function sessionWork(raw: WorkRequest, actor: Actor, options: Optio
         responsibleSessionID: responsible.id, assignments: [responsible.id],
         agents: { [current.id]: current.agent, [responsible.id]: responsible.agent },
         ...(input.padre_id ? { parentID: input.padre_id } : {}), pregunta: input.pregunta, criterios: input.criterios,
-        corpus: input.corpus, referencia: input.referencia, events: [], reviews: [] }
+        corpus: input.corpus, referencia: input.referencia, events: [], reviews: [],
+        ...(input.requerido !== undefined ? { required: input.requerido } : {}) }
       state.work[work.id] = work
     } else {
       work = await authorizedWork(state, input.encargo_id, nodes, options)
-      if (input.action === "get") return { encargo: work }
+      if (input.action === "get") {
+        const messages = options.get.messages && current.agent !== "revisor" ? await options.get.messages(work.responsibleSessionID) : undefined
+        return { encargo: work, ...(messages ? { mensajes: workMessages(work, messages, current.id === work.ownerSessionID) } : {}) }
+      }
       if (input.action === "assign") {
         if (current.id !== work.ownerSessionID) throw new Error("Solo el coordinador propietario asigna sustituto")
+        if (work.executions?.some(e => ["en_cola", "en_curso", "resultado_disponible"].includes(e.state)))
+          throw new Error("Recupera e integra el resultado o registra el impedimento inactivo antes de sustituir la ejecución abierta")
         const responsible = await workIdentity(input.responsable_session_id, nodes, options)
         const previous = await workIdentity(work.responsibleSessionID, nodes, options)
         if (responsible.id !== current.id && responsible.parentID !== current.id || responsible.agent === "revisor" ||
@@ -784,6 +821,9 @@ export async function sessionWork(raw: WorkRequest, actor: Actor, options: Optio
       } else if (input.action === "record") {
         if (![work.ownerSessionID, work.responsibleSessionID].includes(current.id)) throw new Error("Solo propietario o responsable actual registra resultados")
         if (input.suficiencia === "completo" && input.pendientes.length) throw new Error("Un resultado con pendientes sigue siendo parcial")
+        if (input.suficiencia === "completo" && work.executions?.some(e => ["en_cola", "en_curso"].includes(e.state)))
+          throw new Error("No se completa un encargo con ejecución activa")
+        if (input.suficiencia === "completo") await workClosure(state, work, nodes, options, await sessionDirectory(root, state))
         if (input.artefacto_id) {
           const artifact = state.artifacts[input.artefacto_id]
           if (!artifact || !await canReadArtifact(artifact, work, nodes, state, options)) throw new Error("Resultado de otro encargo/corpus o no verificable")
@@ -801,10 +841,27 @@ export async function sessionWork(raw: WorkRequest, actor: Actor, options: Optio
             reviewer.agent !== "revisor" || reviewer.parentID !== current.id) throw new Error("Revisor o entrega fuera de la delegación autorizada")
         if (!work.reviews.some(r => r.sessionID === reviewer.id && r.artifactID === artifact.id))
           work.reviews.push({ sessionID: reviewer.id, artifactID: artifact.id })
+      } else {
+        if (input.action === "confirm" && current.agent === "refinador") {
+          const active = Object.values(state.work).filter(w => w.ownerSessionID === current.id)
+            .flatMap(w => w.executions ?? []).filter(e => ["en_cola", "en_curso"].includes(e.state))
+          const repeated = work.executions?.some(e => e.preparationMessageID === input.preparacion_message_id)
+          if (!repeated && active.length >= settings.agentes.refinador.maxConsultasParalelas)
+            throw new Error("Límite configurado de consultas activas alcanzado")
+        }
+        let artifact: Artifact | undefined
+        if (input.action === "result" && input.artefacto_id) {
+          artifact = state.artifacts[input.artefacto_id]
+          if (!artifact || !await canReadArtifact(artifact, work, nodes, state, options)) throw new Error("Resultado de otro encargo/corpus o no verificable")
+          await verifyArtifact(await sessionDirectory(root, state), artifact, state)
+        }
+        const execution = await changeExecution(work, input, actor, options.get, artifact)
+        await saveJson(join(stateDir, "state.json"), state)
+        return { guardado: true, encargo: work, ejecucion: execution }
       }
     }
     // These are authored declarations. Only session/message identity is runtime evidence;
-    // there is deliberately no fabricated turn ID, scheduler state or integration receipt.
+    // Native execution boundaries, when used, are stored separately from declarations.
     const { action, ...data } = input.action === "record" ? input : { action: input.action }
     const event: WorkEvent = { ...data, action, sessionID: current.id, ...(actor.messageID ? { messageID: actor.messageID } : {}),
       ...(input.action === "assign" || input.action === "create" ? { responsibleSessionID: work.responsibleSessionID } : {}) }

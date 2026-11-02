@@ -1,4 +1,4 @@
-import { fileInput, fileOrigin, operationID, tool, workID } from "./define_tool.ts"
+import { fileInput, fileOrigin, operationID, partial, tool, workID } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
@@ -6,6 +6,7 @@ export default tool({
   args: {
     operacion_id: operationID,
     encargo_id: workID,
+    parcial: partial,
     nombre: tool.schema.string().describe("Nombre simple terminado en .md"),
     contenido: tool.schema.string().min(1).optional(),
     origen: fileOrigin.optional().describe("Alternativa a contenido: promueve un archivo registrado accesible sin reemitirlo"),
@@ -17,7 +18,7 @@ export default tool({
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: args.nombre, files: { [args.nombre]: fileInput(args.contenido, args.origen) },
       sources: args.fuentes, decisions: args.decisiones, operationID: args.operacion_id,
-      workID: args.encargo_id,
+      workID: args.encargo_id, partial: args.parcial,
       publicationType: "publish_agent_deliverable" }, { get: context.resolver }))
   },
 })

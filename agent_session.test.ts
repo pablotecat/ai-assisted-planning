@@ -193,3 +193,17 @@ test("MarkItDown configura UTF-8 mediante el hook de shell V2", async () => {
   } } } as never)
   assert.deepEqual(event.env, { EXISTING: "ok", PYTHONIOENCODING: "utf-8" })
 })
+
+test("S07 fronteras de mensajes por instancia: solo texto nativo, sin contenido de herramientas ni razonamiento", async () => {
+  const make = (label: string) => makeIdentity({ session: {
+    context: async () => [{ id: `${label}-user`, type: "user", text: "CONFIRMAR work-local exec-local" },
+      { id: `${label}-assistant`, type: "assistant", agent: "investigador", finish: "stop", time: { completed: 1 }, content: [
+        { type: "text", text: label }, { type: "reasoning", text: "PRIVATE_REASONING" },
+        { type: "tool", state: { status: "completed", content: [{ type: "text", text: "RAW_SOURCE" }] } },
+      ] }],
+  } } as never)
+  const first = make("first"), second = make("second")
+  assert.equal((await first.messages!("s"))[1].id, "first-assistant")
+  assert.equal((await second.messages!("s"))[1].text, "second")
+  assert.doesNotMatch(JSON.stringify(await first.messages!("s")), /RAW_SOURCE|PRIVATE_REASONING|second/)
+})

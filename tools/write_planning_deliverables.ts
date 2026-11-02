@@ -1,4 +1,4 @@
-import { fileInput, fileOrigin, operationID, tool, workID } from "./define_tool.ts"
+import { fileInput, fileOrigin, operationID, partial, tool, workID } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
 
 export default tool({
@@ -6,6 +6,7 @@ export default tool({
   args: {
     operacion_id: operationID,
     encargo_id: workID,
+    parcial: partial,
     historias: tool.schema.array(tool.schema.object({
       clave: tool.schema.string(), contenido: tool.schema.string().optional(), origen_contenido: fileOrigin.optional(),
       incidencias: tool.schema.string().optional(), origen_incidencias: fileOrigin.optional(),
@@ -31,6 +32,6 @@ export default tool({
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: historias[0].clave, group: "entrega", files,
       keys: historias.map((item) => item.clave), sources: args.fuentes, decisions: args.decisiones,
-      operationID: args.operacion_id, publicationType: "write_planning_deliverables", workID: args.encargo_id }, { get: context.resolver }))
+      operationID: args.operacion_id, publicationType: "write_planning_deliverables", workID: args.encargo_id, partial: args.parcial }, { get: context.resolver }))
   },
 })
