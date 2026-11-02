@@ -207,6 +207,52 @@ If an MCP catalog is empty just after a new session starts, confirm the connecti
 
 The package's configuration and publishing tools are direct tools, not entries in the Code Mode catalog. An empty search there does not establish their absence. Distinguish a tool not yet called, a permission denial, an execution error, `guardado:false`, and a confirmed publication; see [tool interfaces and diagnostic evidence](.apm/skills/operativa-comun/references/configuracion.md#herramientas-y-autorizaciones). For rejected code-reader shell commands, follow the returned read-only alternative and [separate Git queries](.apm/skills/consulta-codegraph/SKILL.md#interfaz-de-consulta).
 
+## Diagnose an execution
+
+Use [session-diagnostics.mjs](scripts/session-diagnostics.mjs) to inspect an authorized session tree without exporting its conversation. Run it from the consuming project root, in a separate audit session. Replace the IDs and `START_MS`/`END_MS` with the actual session IDs and Unix milliseconds for the assignment:
+
+```sh
+node apm_modules/pablotecat/ai-assisted-planning/scripts/session-diagnostics.mjs --root ses_ROOT --from START_MS --to END_MS --audit-session ses_AUDIT --format markdown
+```
+
+The interval is `[from,to)`. The audit session and its descendants are excluded; it cannot be the diagnosed root. `--descendants all` is the default; use `none` or a comma-separated list of actual descendant IDs for a narrower selection. Repeat `--exclude-session ID` for other exclusions. The script emits only the report to stdout; `--format json` returns the full diagnostic data instead of the Markdown summary.
+
+Live reads use `opencode api` discovery and authentication, then check the running server's `/openapi.json`. The script follows every session/message page, including archived children, deduplicates IDs, and keeps delegation separate from tool containment. Reads are not an atomic snapshot: prefer a finished assignment and keep the acquisition timestamps and version when comparing runs. `--page-size` accepts 1–200; lower it if a page exceeds the CLI's output buffer.
+
+For an explicit server, add `--server URL` and use that server's existing CLI authentication context. Without this flag, the CLI can start the managed background service if none is available. For isolated checks, always use the URL returned by a private server; this script does not stop, restart, or reconfigure a service and does not read its database or credential files.
+
+### Interpret coverage and units
+
+- Every metric records a unit, coverage (`complete`, `partial`, or `unknown`), and provenance (`original-event`, `history-reconstruction`, or `agent-declaration`). Complete coverage refers to the selected history or supplied receipts, not proof that an external source was fully read. `null` means unavailable, not zero.
+- Registered calls, internal operations, catalog searches, recovery requests, orchestration, and final operations are separate counts; these layers overlap and must not be added. Known container children replace the container recursively in the final count. A verified local `execute` remains one operation; unobserved expansion stays partial/unknown. None of these totals establishes an HTTP request count.
+- `windowWall` is the requested window, not measured processing time. Tool execution and delegated waits use unions of intervals, clipped at the cutoff. `observedActivitySpan` is only the span of available tool/wait marks, not a reconstructed causal critical path. Concurrent assistant steps include provider waits and are not a count of active human assignments. Missing tool endpoints are censored and partial; a delay before execution has no inferred cause.
+- Provider input/output/reasoning/cache tokens and reported USD stay separate. Usage from steps crossing the cutoff is not attributed to the window. `publisherArgumentCodeUnits` measures the UTF-16 length of JSON-serialized publisher arguments, including JSON syntax, not tokens, bytes, or saved document length. Declared reads, downloads, sources read, and characters remain separate, partial declarations.
+- The V2 2.1.2 projected history does not expose internal Code Mode operations, the first provider event, delegated waits, or result notification/integration as dedicated fields. The adapter reports these absences rather than mining prompts, JavaScript, or prose. `firstProviderEvent` is the minimum available request-to-first-event delay; per-message values and result-delivery latencies are in JSON. A completed tool can still report a domain incident; a repeated prose mention does not create another incident.
+- Output is constructed from permitted diagnostic fields: IDs, relationships, timestamps, roles, tool/model names, states, units, and counts. Prompts, titles, document arguments, file contents, headers, signed URLs, raw errors, and native/encrypted reasoning are not exported. Keep even sanitized IDs within the authorized audience.
+
+### Replay a fixture or retained snapshot
+
+From this source repository, this command is reproducible without a server or model:
+
+```sh
+node scripts/session-diagnostics.mjs --input test-support/session-diagnostics.json --root ses_root --from 1000 --to 1600 --audit-session ses_audit --format json
+```
+
+`--input` accepts a trusted JSON envelope `{ "schemaVersion": 1, "sessions": [...] }`. Each session uses the installed V2 projected shape plus its `messages` array. Optional `acquisition` records `version`, `source`, page counts and timestamps. This is an input snapshot, not a report previously emitted by the reducer. The script never saves raw history; arrange any retained input separately under your data-handling policy.
+
+When independently retained receipts exist, optional `observations` supplies the missing boundaries. These are this script's input fields, **not native OpenCode fields**:
+
+| Collection | Required identity and evidence |
+|---|---|
+| `operations` | `sessionID`, `messageID`, `id`, `name`, `time.created` and `provenance`; optional `parentID`, `layer` (`internal`, `catalog-search`, `recovery-request`, `orchestration`), `kind` (`container`, `local`), `expansion` (`complete`, `partial`, `unknown`), `time.ran`/`completed`, `status`. A receipt matching a registered ID annotates it rather than adding a call. |
+| `incidents` | `sessionID`, `id`, `at`, `category` (`provider`, `permission`, `invocation`, `domain`, `unknown`), `provenance`, and `references` to existing session/message IDs; optional numeric `status` and same-session `retryOf`. Repeated incident IDs merge references; only explicit retry links merge attempts. |
+| `timings` | `sessionID`, `id`, `kind`, `provenance`; `first-event` links a `messageID` and `firstEventAt`; `delegated-wait` links a direct `childSessionID` and `start`/`end`; `result-delivery` links that child and `resultAt`/`notifiedAt`/`integratedAt`. |
+| `declarations` | `sessionID`, `id`, `at`, `metric` (`reads`, `downloads`, `sourcesRead`, `publisherCharacters`) and numeric `value`. Always exported as partial `agent-declaration`, never promoted to a receipt. |
+
+Receipts must retain their real provenance; labeling an input `original-event` does not independently authenticate it. Domain errors are recognized automatically only from an explicit JSON tool result `{ "error": { "type": "domain", "status": 404 } }`; other result formats need a classified receipt. Permission/invocation types are recognized conservatively; unknown errors stay unknown. See the executable [diagnostic cases](session_diagnostics.test.ts) for nested containers, overlap, retries, partial data, and privacy checks.
+
+For before/after comparisons, fix the case, source version, model, concurrency settings, interval boundaries and external-service conditions first. Retain sanitized outputs for each authorized repetition and report sample size and dispersion (for example median and range), separating external delays and missing fields. There is no comparable pre-change baseline supplied with this implementation; fixtures and imported transcripts do not replace one. Fewer calls alone establishes neither saved time nor improved quality.
+
 ## Contribute to the package
 
 For changes to agents, skills, plugins, settings, or installation scripts, follow [AGENTS.md](AGENTS.md). It covers source ownership, runtime controls, consumer isolation, and repository checks.

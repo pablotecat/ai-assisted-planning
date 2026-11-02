@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "acquisition": { "version": "2.1.2", "source": "history-reconstruction", "pages": 8, "duplicates": 0 },
+  "sessions": [
+    {
+      "id": "ses_root", "agent": "planificador", "time": { "created": 1000 },
+      "messages": [
+        { "id": "msg_user", "type": "user", "time": { "created": 1000 }, "text": "Prompt que no se exporta" },
+        { "id": "msg_step", "type": "assistant", "agent": "planificador", "model": { "providerID": "fixture", "id": "fixture" }, "time": { "created": 1100, "streamed": 1300, "completed": 1400 }, "content": [] },
+        { "id": "msg_steer", "type": "user", "time": { "created": 1150 }, "text": "Steering en el mismo turno" },
+        { "id": "msg_step", "type": "assistant", "agent": "planificador", "model": { "providerID": "fixture", "id": "fixture" }, "time": { "created": 1100, "streamed": 1300, "completed": 1400 }, "content": [] },
+        { "id": "msg_idle", "type": "idle", "time": { "created": 1500 }, "outcome": "succeeded" },
+        { "id": "msg_later", "type": "user", "time": { "created": 2000 }, "text": "Fuera del encargo" }
+      ]
+    },
+    { "id": "ses_child", "parentID": "ses_root", "agent": "investigador", "time": { "created": 1200 }, "messages": [
+      { "id": "msg_child", "type": "user", "time": { "created": 1200 }, "text": "Pregunta" }
+    ] },
+    { "id": "ses_grandchild", "parentID": "ses_child", "time": { "created": 1250 }, "messages": [] },
+    { "id": "ses_audit", "parentID": "ses_root", "time": { "created": 1300 }, "messages": [
+      { "id": "msg_audit", "type": "user", "time": { "created": 1300 }, "text": "Audita" }
+    ] },
+    { "id": "ses_audit_child", "parentID": "ses_audit", "time": { "created": 1350 }, "messages": [] },
+    { "id": "ses_other", "time": { "created": 1300 }, "messages": [] }
+  ]
+}
