@@ -450,8 +450,10 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
     const planning = probe(host, toolEnv, { agent: "planificador", tool: "planning_settings", args: {} })
     assert.ok(JSON.stringify(planning.result).includes("PROYECTO_JIRA"), "Herramientas de archivo V1 compatibles en V2")
     for (const tool of ["agent_settings", "investigator_defaults", "architecture_settings", "refinement_settings",
-      "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair", "write_review_documents", "session_work", "session_artifacts"])
+      "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair",
+      "write_review_documents", "session_work", "session_artifacts", "sesion_capture_agent_source"])
        assert.ok(planning.tools.includes(tool), `Herramienta instalada: ${tool}`)
+    assert.ok(planning.codeModeTools.includes("sesion_capture_agent_source"), "capture_agent_source: interfaz Code Mode instalada")
     for (const name of ["session_work", "session_artifacts"]) {
       assert.ok(!planning.codeModeTools.includes(name), `${name}: interfaz directa instalada`)
       for (const agent of [...jiraAgents, "lector-codigo", "arquitecto-test"])

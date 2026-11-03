@@ -40,6 +40,27 @@ export type Artifact = {
   workID?: string; producerMessageID?: string; closure?: Closure;
   previous?: string; origin: { type: "literal" | "promotion"; delivery?: string; files?: Record<string, FileOrigin> }
 }
+// D08: la captura conserva la respuesta original de una fuente, ya obtenida
+// dentro del mismo código de Code Mode. El registro solo guarda blobs por hash;
+// el original nunca se reescribe y un cambio de versión durante la recuperación
+// añade instantáneas sin sobrescribir la anterior.
+export type SourceCoveragePages = { recuperadas: number[]; pendientes: number[]; total: number }
+export type SourceCoverageFields = { recuperados: string[]; pendientes: string[] }
+export type SnapshotInput = {
+  encargo_id: string; corpus: string; referencia: string; fuente: string; operacion_id: string
+  representacion?: "texto_literal" | "objeto_serializado"
+  version?: { tipo: "hash" | "fecha" | "referencia" | "otro"; valor: string }
+  paginas?: SourceCoveragePages; campos?: SourceCoverageFields; pendientes?: string[]
+  resultado?: string | Record<string, unknown>
+}
+export type Snapshot = {
+  id: string; operacionKey: string; operacion_id: string; digest: string
+  rootSessionID: string; workID: string; producerSessionID: string; agent: string; producerMessageID?: string
+  fuente: string; corpus: string; referencia: string; archivo: string
+  contentSha256: string; bytes: number; representacion: "texto_literal" | "objeto_serializado"; formato: string; created: number
+  version?: { tipo: "hash" | "fecha" | "referencia" | "otro"; valor: string }
+  cobertura_paginas?: SourceCoveragePages; cobertura_campos?: SourceCoverageFields; pendientes?: string[]
+}
 type WorkEvent = { sessionID: string; messageID?: string; action: string; responsibleSessionID?: string;
   suficiencia?: "parcial" | "completo";
   resultado?: string; pendientes?: string[]; siguiente_accion?: string; fuentes?: string[]; decisiones?: string[];
@@ -59,7 +80,8 @@ type Operation = {
 type State = { root: string; entries: Record<string, Entry>; deliveries: string[]; sources: string[];
   decisions: string[]; keys: string[]; schemaVersion: 1;
   artifacts: Record<string, Artifact>; operations: Record<string, Operation>;
-  reviews: Record<string, Review>; versions: Record<string, Version>; work: Record<string, Work> }
+  reviews: Record<string, Review>; versions: Record<string, Version>; work: Record<string, Work>;
+  snapshots: Record<string, Snapshot> }
 type Options = { get: Resolver; root?: string; settingsPath?: string;
   // Internal fault seam, never exposed in a tool's schema.
   checkpoint?: (phase: string) => void | Promise<void> }
@@ -244,7 +266,8 @@ async function loadState(stateDir: string, migrate = true): Promise<State> {
   if (typeof state.root !== "string" || basename(state.root) !== state.root || ["", ".", ".."].includes(state.root) ||
       !state.entries || !Array.isArray(state.deliveries)) throw new Error("Raíz de sesión inválida")
   return { ...state, schemaVersion: 1, sources: state.sources ?? [], decisions: state.decisions ?? [], keys: state.keys ?? [],
-    artifacts: state.artifacts ?? {}, operations: state.operations ?? {}, reviews: state.reviews ?? {}, versions: state.versions ?? {}, work: state.work ?? {} }
+    artifacts: state.artifacts ?? {}, operations: state.operations ?? {}, reviews: state.reviews ?? {}, versions: state.versions ?? {}, work: state.work ?? {},
+    snapshots: state.snapshots ?? {} }
 }
 
 async function sessionDirectory(root: string, state: State) {
@@ -279,7 +302,7 @@ async function loadOrCreateState(root: string, stateDir: string, node: Identity,
     }
   }
   const state: State = { root: rootFolder, entries: {}, deliveries: [], sources: [], decisions: [], keys: [], schemaVersion: 1,
-    artifacts: {}, operations: {}, reviews: {}, versions: {}, work: {} }
+    artifacts: {}, operations: {}, reviews: {}, versions: {}, work: {}, snapshots: {} }
   await saveJson(join(stateDir, "state.json"), state)
   return state
 }
@@ -893,6 +916,240 @@ function pageOffset(cursor: string | undefined, binding: string, length: number)
 const nextCursor = (binding: string, offset: number, length: number) => offset < length
   ? Buffer.from(JSON.stringify({ binding, offset })).toString("base64url") : null
 
+// Serialization is deterministic by structure; the received values stay literal.
+function stableStringify(value: unknown): string {
+  if (value === undefined) return "null"
+  if (Array.isArray(value)) return `[${value.map(item => stableStringify(item)).join(",")}]`
+  if (value !== null && typeof value === "object")
+    return `{${Object.keys(value as Record<string, unknown>).sort().map(key =>
+      `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`).join(",")}}`
+  return JSON.stringify(value)
+}
+function parsedJson(text: string): unknown {
+  try { return JSON.parse(text) } catch { return undefined }
+}
+// Only wrappers covered by known read contracts classify as a known format; an
+// unexpected one is preserved and diagnosed, never read as absence or undefined.
+function classifyWrapper(value: unknown): string {
+  if (Array.isArray(value)) return "lista"
+  if (!value || typeof value !== "object") return "desconocido"
+  const keys = Object.keys(value)
+  if (keys.includes("error")) return "error_de_fuente"
+  if (keys.includes("data") || keys.includes("output")) return "envoltorio_datos"
+  if (keys.includes("key") && keys.includes("fields")) return "jira_issue"
+  if (keys.includes("comments") && keys.includes("total")) return "jira_comentarios"
+  if (keys.includes("fields")) return "objeto_campos"
+  return "desconocido"
+}
+// Preserves the received representation and identifies which one was obtained:
+// literal text stays untouched; an object is serialized deterministically.
+function normalizeSourceResult(declared: SnapshotInput["representacion"], resultado: SnapshotInput["resultado"]):
+  { representacion: "texto_literal" | "objeto_serializado"; content: string; formato: string } {
+  if (typeof resultado === "string") {
+    if (declared !== "objeto_serializado") return { representacion: "texto_literal", content: resultado, formato: "texto" }
+    const parsed = parsedJson(resultado)
+    if (parsed === undefined || parsed === null || typeof parsed !== "object")
+      throw new Error("La representación declarada no es un objeto serializado válido")
+    return { representacion: "objeto_serializado", content: stableStringify(parsed), formato: classifyWrapper(parsed) }
+  }
+  if (declared === "texto_literal") throw new Error("Un objeto capturado no se declara como texto literal")
+  try {
+    return { representacion: "objeto_serializado", content: stableStringify(resultado), formato: classifyWrapper(resultado) }
+  } catch {
+    throw new Error("El resultado contiene valores no serializables de forma determinista")
+  }
+}
+
+function snapshotResult(snapshot: Snapshot, state: State) {
+  // A version change observed during recovery is reported, never an overwrite.
+  const previous = Object.values(state.snapshots).filter(other => other.id !== snapshot.id &&
+    other.workID === snapshot.workID && other.fuente === snapshot.fuente && other.corpus === snapshot.corpus &&
+    other.referencia === snapshot.referencia && other.version && snapshot.version &&
+    other.version.valor !== snapshot.version.valor)
+  return { guardado: true, instantanea_id: snapshot.id, operacion_id: snapshot.operacion_id,
+    fuente: snapshot.fuente, corpus: snapshot.corpus, referencia: snapshot.referencia, archivo: snapshot.archivo,
+    representacion: snapshot.representacion, formato: snapshot.formato,
+    contenido: { sha256: snapshot.contentSha256, bytes: snapshot.bytes },
+    ...(snapshot.version ? { version: snapshot.version } : {}),
+    ...(snapshot.cobertura_paginas ? { cobertura_paginas: snapshot.cobertura_paginas } : {}),
+    ...(snapshot.cobertura_campos ? { cobertura_campos: snapshot.cobertura_campos } : {}),
+    ...(snapshot.pendientes ? { pendientes: snapshot.pendientes } : {}),
+    ...(snapshot.formato === "desconocido" ? { diagnostico: { tipo: "envoltorio_desconocido",
+      detalle: "La respuesta se conservó íntegra; su formato no coincide los contratos conocidos, no se genera vista derivada y no se interpreta como ausencia" } } : {}),
+    ...(previous.length ? { aviso_version: previous.map(other =>
+      ({ instantanea_anterior_id: other.id, version_anterior: other.version })) } : {}) }
+}
+
+// D05 for snapshots: access derives from the verified tree and assignment, not
+// from knowing an ID, a hash or a blob path.
+async function canReadSource(snapshot: Snapshot, work: Work, nodes: Identity[], state: State, options: Options) {
+  if (snapshot.workID !== work.id || snapshot.rootSessionID !== nodes[0].id) return false
+  const actor = nodes.at(-1)!
+  const producer = await workIdentity(snapshot.producerSessionID, nodes, options)
+  if (producer.agent !== snapshot.agent) throw new Error("Productor de la fuente distinto del registro")
+  if (actor.agent === "revisor") return work.reviews.some(review => review.sessionID === actor.id)
+  if (actor.id !== work.responsibleSessionID && !manages(work, actor.id, state) && actor.id !== producer.id) return false
+  if (!work.assignments.includes(producer.id)) return false
+  // Raw sources captured by a reader keep their narrow audience: an investigator
+  // does not acquire raw code/local-document access through a caller-supplied label.
+  if (actor.agent === "investigador" && !["investigador", "refinador", "planificador", "arquitecto"].includes(producer.agent)) return false
+  if (actor.agent === "lector-codigo" && !["lector-codigo", "investigador"].includes(producer.agent)) return false
+  if (actor.agent === "lector-documentacion" && ["lector-codigo", "arquitecto-test"].includes(producer.agent)) return false
+  if (actor.agent === "arquitecto-test" && !["arquitecto", "arquitecto-test", "revisor"].includes(producer.agent)) return false
+  return true
+}
+
+async function sourceBlob(stateDir: string, snapshot: Snapshot) {
+  const blobs = join(stateDir, "snapshots")
+  await checkExistingAncestors(blobs)
+  await directory(blobs)
+  const path = join(blobs, snapshot.contentSha256)
+  const stat = await lstat(path)
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Original de fuente no verificable")
+  const bytes = await readFile(path)
+  if (hash(bytes) !== snapshot.contentSha256 || bytes.length !== snapshot.bytes)
+    throw new Error("Contenido de la fuente modificado externamente")
+  return bytes
+}
+
+// D08 capture entry: the read result is transferred within the same Code Mode
+// code, never re-transcribed by the model; no destination path is accepted and
+// the runtime resolves producer/encargo/corpus without declared authorship.
+export async function captureSource(input: SnapshotInput, actor: Actor, options: Options): Promise<unknown> {
+  if (input.resultado === undefined || input.resultado === null || input.resultado === "")
+    throw new Error("Resultado requerido: una respuesta ausente no se interpreta como contenido vacío ni como ausencia de la fuente")
+  const nodes = await chain(actor.sessionID, actor.messageID, options.get)
+  const current = nodes.at(-1)!
+  if (current.agent !== actor.agent) throw new Error("Autor de captura diferente")
+  if (current.agent === "revisor") throw new Error("El Revisor consulta instantáneas; no captura fuentes")
+  const settings = await readAgentSettings(options.settingsPath)
+  checkReader(current, nodes, settings.agentes.investigador.especialistasPermitidos)
+  if (!settings.agentes[agentNames[current.agent]].guardarEntregablesEnSesion) return { guardado: false }
+  const { root, stateDir } = await stateLocation(nodes, options, true)
+  return locked(join(stateDir, ".lock"), async () => {
+    const state = await loadOrCreateState(root, stateDir, nodes[0], "encargo")
+    const work = await authorizedWork(state, input.encargo_id, nodes, options)
+    if (input.corpus !== work.corpus || input.referencia !== work.referencia)
+      throw new Error("Corpus/referencia del encargo distintos")
+    if (current.id !== work.responsibleSessionID && current.id !== work.ownerSessionID)
+      throw new Error("Solo el responsable actual o el coordinador propietario capturan fuentes del encargo")
+    const normalized = normalizeSourceResult(input.representacion, input.resultado)
+    const digest = hash(JSON.stringify([input.encargo_id, input.fuente, input.operacion_id, normalized.representacion,
+      normalized.content, input.version ?? null, input.paginas ?? null, input.campos ?? null, input.pendientes ?? []]))
+    const operacionKey = hash(JSON.stringify([current.id, "capture_agent_source", input.operacion_id]))
+    const existing = Object.values(state.snapshots).find(snapshot => snapshot.operacionKey === operacionKey)
+    if (existing) {
+      if (existing.digest !== digest) throw new Error("Identidad de captura reutilizada con contenido distinto")
+      return snapshotResult(existing, state)
+    }
+    const contentSha256 = hash(normalized.content)
+    const blobs = join(stateDir, "snapshots")
+    await checkExistingAncestors(blobs)
+    await mkdir(blobs, { recursive: true })
+    await directory(blobs)
+    const blobPath = join(blobs, contentSha256)
+    const previousFile = await lstat(blobPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error
+      return undefined
+    })
+    if (previousFile) {
+      if (!previousFile.isFile() || previousFile.isSymbolicLink()) throw new Error("Original de fuente no verificable")
+      if (hash(await readFile(blobPath)) !== contentSha256) throw new Error("Original de fuente alterado")
+    } else await writeFile(blobPath, normalized.content, { flag: "wx" })
+    const snapshot: Snapshot = {
+      id: `snap-${randomUUID()}`, operacionKey, operacion_id: input.operacion_id, digest,
+      rootSessionID: nodes[0].id, workID: work.id, producerSessionID: current.id, agent: current.agent,
+      ...(actor.messageID ? { producerMessageID: actor.messageID } : {}),
+      fuente: input.fuente, corpus: work.corpus, referencia: work.referencia,
+      archivo: `fuentes/${slug(input.fuente)}.txt`, contentSha256, bytes: Buffer.byteLength(normalized.content),
+      representacion: normalized.representacion, formato: normalized.formato, created: Date.now(),
+      ...(input.version ? { version: input.version } : {}),
+      ...(input.paginas ? { cobertura_paginas: input.paginas } : {}),
+      ...(input.campos ? { cobertura_campos: input.campos } : {}),
+      ...(input.pendientes?.length ? { pendientes: input.pendientes } : {}),
+    }
+    state.snapshots[snapshot.id] = snapshot
+    await saveJson(join(stateDir, "state.json"), state)
+    return snapshotResult(snapshot, state)
+  })
+}
+
+//// Derived views: stable line locators over an intact original. ////
+
+function lineIndex(text: string) {
+  const lines: string[] = [], starts: number[] = []
+  let offset = 0
+  for (const match of text.matchAll(/\r?\n/g)) {
+    lines.push(text.slice(offset, match.index))
+    starts.push(offset)
+    offset = match.index + match[0].length
+  }
+  lines.push(text.slice(offset))
+  starts.push(offset)
+  return { lines, starts }
+}
+function locatorLine(localizador: string, totalLines: number) {
+  const match = /^L([1-9][0-9]{0,9})$/.exec(localizador)
+  if (!match) throw new Error("Localizador inválido: usa L<número de línea 1-based>")
+  const line = Number(match[1]) - 1
+  if (line >= totalLines) throw new Error("Localizador fuera del original")
+  return line
+}
+function viewOffset(cursor: string | undefined, binding: string, totalLines: number) {
+  if (!cursor) return 0
+  let data: { binding: string; line: number }
+  try { data = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) } catch { throw new Error("Cursor inválido") }
+  if (!data || typeof data !== "object" || data.binding !== binding || !Number.isSafeInteger(data.line) ||
+      data.line < 0 || data.line >= totalLines) throw new Error("Cursor de otro solicitante, encargo, archivo o versión")
+  return data.line
+}
+const nextViewCursor = (binding: string, line: number, totalLines: number) => line < totalLines
+  ? Buffer.from(JSON.stringify({ binding, line })).toString("base64url") : null
+// A line is never split across pages: a single line longer than the limit is
+// returned whole on its own page so long HTML stays fully recoverable.
+function linePage(lines: string[], from: number, limit: number) {
+  const page: { numero: number; contenido: string }[] = []
+  let units = 0, excede = false, index = from
+  while (index < lines.length) {
+    const length = lines[index].length + (page.length ? 1 : 0)
+    if (units + length > limit && page.length) break
+    if (length > limit) excede = true
+    page.push({ numero: index + 1, contenido: lines[index] })
+    units += length
+    index++
+  }
+  return { page, units, excede, next: index }
+}
+function sourceView(meta: {
+  id: string; archivo: string; sha256: string; bytes: number; formato: string; instantanea: boolean
+  fuente?: string; corpus?: string; referencia?: string; representacion?: string
+  version?: Snapshot["version"]; cobertura_paginas?: SourceCoveragePages; cobertura_campos?: SourceCoverageFields; pendientes?: string[]
+}, text: string, binding: string, input: { cursor?: string; limite?: number; localizador?: string }) {
+  if (meta.formato === "desconocido")
+    return { artefacto_id: meta.id, archivo: meta.archivo, vista: "linea",
+      diagnostico: { tipo: "envoltorio_no_reconocido",
+        detalle: "El formato conservado no coincide los contratos conocidos: no se genera vista derivada ni se interpreta undefined como ausencia; el original sigue disponible por lectura cruda paginada" },
+      original: { disponible: true, lectura: "cruda", sha256: meta.sha256, bytes: meta.bytes,
+        total_unidades: text.length } }
+  const { lines } = lineIndex(text)
+  if (input.localizador && input.cursor) throw new Error("Indica cursor o localizador, no ambos")
+  const viewBinding = hash(JSON.stringify([binding, "linea"]))
+  const from = input.localizador ? locatorLine(input.localizador, lines.length)
+    : viewOffset(input.cursor, viewBinding, lines.length)
+  const page = linePage(lines, from, input.limite ?? 4000)
+  return { artefacto_id: meta.id, archivo: meta.archivo, vista: "linea",
+    ...(meta.instantanea ? { instantanea: true } : {}),
+    ...(meta.fuente ? { fuente: meta.fuente, corpus: meta.corpus, referencia: meta.referencia,
+      representacion: meta.representacion } : {}),
+    ...(meta.version ? { version: meta.version } : {}),
+    ...(meta.cobertura_paginas ? { cobertura_paginas: meta.cobertura_paginas } : {}),
+    ...(meta.cobertura_campos ? { cobertura_campos: meta.cobertura_campos } : {}),
+    ...(meta.pendientes ? { pendientes: meta.pendientes } : {}),
+    total_lineas: lines.length, total_unidades: text.length, lineas: page.page, lineas_unidades: page.units,
+    ...(page.excede ? { excede_limite: true } : {}), cursor: nextViewCursor(viewBinding, page.next, lines.length) }
+}
+
+
 export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, options: Options): Promise<unknown> {
   const input = artifactRequest.parse(raw)
   const nodes = await chain(actor.sessionID, actor.messageID, options.get)
@@ -920,22 +1177,58 @@ export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, optio
       return { ...artifact, operacion_id: operation.logicalID, fuentes: operation.sources, decisiones: operation.decisions, claves: operation.keys }
     }), cursor: nextCursor(binding, offset + page.length, accessible.length) }
   }
+  const readResult = async (id: string, archivo: string, meta: {
+    sha256: string; text: string; instantanea: boolean; extra?: Record<string, unknown> }) => {
+    const binding = hash(JSON.stringify([actor.sessionID, work.id, id, archivo, meta.sha256]))
+    if (input.localizador && input.cursor) throw new Error("Indica cursor o localizador, no ambos")
+    const offset = input.localizador
+      ? (() => {
+        const { lines, starts } = lineIndex(meta.text)
+        return starts[locatorLine(input.localizador!, lines.length)]
+      })()
+      : pageOffset(input.cursor, binding, meta.text.length)
+    if (offset && /[\uDC00-\uDFFF]/.test(meta.text[offset]) && /[\uD800-\uDBFF]/.test(meta.text[offset - 1]))
+      throw new Error("Cursor dentro de un carácter Unicode")
+    let end = Math.min(offset + (input.limite ?? 4000), meta.text.length)
+    if (end < meta.text.length && /[\uD800-\uDBFF]/.test(meta.text[end - 1]) && /[\uDC00-\uDFFF]/.test(meta.text[end])) end++
+    return { artefacto_id: id, archivo, sha256: meta.sha256, inicio: offset, fin: end, total: meta.text.length,
+      unidad: "UTF-16", contenido: meta.text.slice(offset, end), cursor: nextCursor(binding, end, meta.text.length),
+      ...(meta.instantanea ? { instantanea: true } : {}), ...(meta.extra ?? {}) }
+  }
   const artifact = accessible.find(a => a.id === input.artefacto_id)
-  const file = artifact?.files.find(f => f.path === input.archivo)
-  if (!artifact || !file) throw new Error("Artefacto/archivo no asignado o no registrado")
+  if (!artifact) {
+    // Snapshots read through the same bounded contract: corpus/reference must
+    // match, the blob is verified by hash and a known ID grants nothing alone.
+    const snapshot = state.snapshots[input.artefacto_id]
+    if (!snapshot || !await canReadSource(snapshot, work, nodes, state, options))
+      throw new Error("Artefacto/archivo no asignado o no registrado")
+    if (input.archivo !== snapshot.archivo) throw new Error("Artefacto/archivo no asignado o no registrado")
+    const bytes = await sourceBlob(stateDir!, snapshot)
+    const text = bytes.toString("utf8")
+    const binding = hash(JSON.stringify([actor.sessionID, work.id, snapshot.id, snapshot.archivo, snapshot.contentSha256]))
+    if (input.vista === "linea") return sourceView({ id: snapshot.id, archivo: snapshot.archivo, sha256: snapshot.contentSha256,
+      bytes: snapshot.bytes, formato: snapshot.formato, instantanea: true, fuente: snapshot.fuente, corpus: snapshot.corpus,
+      referencia: snapshot.referencia, representacion: snapshot.representacion, version: snapshot.version,
+      cobertura_paginas: snapshot.cobertura_paginas, cobertura_campos: snapshot.cobertura_campos,
+      pendientes: snapshot.pendientes }, text, binding, input)
+    return readResult(input.artefacto_id, snapshot.archivo, { sha256: snapshot.contentSha256, text, instantanea: true,
+      extra: { fuente: snapshot.fuente, corpus: snapshot.corpus, referencia: snapshot.referencia,
+        representacion: snapshot.representacion, formato: snapshot.formato,
+        ...(snapshot.version ? { version: snapshot.version } : {}) } })
+  }
+  const file = artifact.files.find(f => f.path === input.archivo)
+  if (!file) throw new Error("Artefacto/archivo no asignado o no registrado")
   await verifyArtifact(sessionDir, artifact, state)
   const path = join(sessionDir, file.path)
   await checkedFile(sessionDir, path)
   const bytes = await readFile(path)
   if (hash(bytes) !== file.sha256 || bytes.length !== file.bytes) throw new Error("Contenido del artefacto modificado externamente")
   const text = bytes.toString("utf8")
-  const binding = hash(JSON.stringify([actor.sessionID, work.id, artifact.id, file.path, file.sha256]))
-  const offset = pageOffset(input.cursor, binding, text.length)
-  if (offset && /[\uDC00-\uDFFF]/.test(text[offset]) && /[\uD800-\uDBFF]/.test(text[offset - 1])) throw new Error("Cursor dentro de un carácter Unicode")
-  let end = Math.min(offset + (input.limite ?? 4000), text.length)
-  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1]) && /[\uDC00-\uDFFF]/.test(text[end])) end++
-  return { artefacto_id: artifact.id, archivo: file.path, sha256: file.sha256, inicio: offset, fin: end,
-    total: text.length, unidad: "UTF-16", contenido: text.slice(offset, end), cursor: nextCursor(binding, end, text.length) }
+  if (input.vista === "linea")
+    return sourceView({ id: artifact.id, archivo: file.path, sha256: file.sha256, bytes: file.bytes,
+      formato: "texto", instantanea: false },
+      text, hash(JSON.stringify([actor.sessionID, work.id, artifact.id, file.path, file.sha256])), input)
+  return readResult(input.artefacto_id, file.path, { sha256: file.sha256, text, instantanea: false })
 }
 
 // Append reviewer-authored reports to an existing, indexed delivery of its direct parent.

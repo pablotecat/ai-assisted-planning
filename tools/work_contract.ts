@@ -51,10 +51,13 @@ export const artifactFields = {
   action: tool.schema.enum(["list", "read"]), encargo_id: text, corpus: text, referencia: text,
   artefacto_id: text.optional(), archivo: text.optional(), cursor: text.optional(),
   limite: tool.schema.number().int().min(1).max(16000).optional(),
+  vista: tool.schema.enum(["linea"]).optional().describe("Vista derivada estable por líneas del original intacto; solo formatos conocidos, un envoltorio desconocido produce diagnóstico"),
+  localizador: text.optional().describe("Localizador de fragmento L<número de línea 1-based> del original registrado; exclusivo con cursor"),
 }
 const artifacts = tool.schema.object(artifactFields)
 export const artifactRequest = tool.schema.discriminatedUnion("action", [
-  artifacts.omit({ archivo: true, artefacto_id: true }).extend({ action: tool.schema.literal("list") }).strict(),
+  artifacts.omit({ archivo: true, artefacto_id: true, vista: true, localizador: true })
+    .extend({ action: tool.schema.literal("list") }).strict(),
   artifacts.extend({ action: tool.schema.literal("read"), artefacto_id: text, archivo: text }).strict(),
 ])
 export type ArtifactRequest = ReturnType<typeof artifactRequest.parse>

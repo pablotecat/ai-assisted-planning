@@ -48,10 +48,13 @@ const base = { title: "Consulta", created: 1, directory: "proyecto" }
 
 test("las herramientas explícitas se registran en V2 y validan permisos e inputs", async () => {
   const { tools, permissions } = await adapter({})
-  assert.deepEqual(Object.keys(tools).sort(), ["agent_settings", "architecture_settings", "investigator_defaults", "planning_settings",
-    "refinement_settings", "publish_agent_deliverable", "write_planning_originals", "write_planning_deliverables", "write_report_pair",
+  assert.deepEqual(Object.keys(tools).sort(), ["agent_settings", "architecture_settings", "capture_agent_source",
+    "investigator_defaults", "planning_settings", "refinement_settings", "publish_agent_deliverable",
+    "write_planning_originals", "write_planning_deliverables", "write_report_pair",
     "write_review_documents", "session_work", "session_artifacts"].sort())
-  for (const definition of Object.values(tools)) assert.equal(definition.options.codemode, false)
+  // capture_agent_source only exists for Code Mode (D05/D08); the rest are direct tools.
+  for (const [name, definition] of Object.entries(tools))
+    assert.equal(definition.options.codemode, name === "capture_agent_source", `${name}: interfaz`)
   const context = { sessionID: "s", messageID: "mensaje", id: "call", agent: "planificador" }
   const result = await tools.planning_settings.execute({}, context)
   assert.equal(typeof JSON.parse(result.content).MAX_REFINADORES_PARALELOS, "number")

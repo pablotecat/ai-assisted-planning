@@ -12,6 +12,7 @@ import writeReportPair from "../tools/write_report_pair.ts"
 import writeReviewDocuments from "../tools/write_review_documents.ts"
 import sessionWork from "../tools/session_work.ts"
 import sessionArtifacts from "../tools/session_artifacts.ts"
+import captureAgentSource from "../tools/capture_agent_source.ts"
 import { makeIdentity } from "../tools/identity.ts"
 
 const packageAgents = new Set(["investigador", "lector-codigo", "lector-documentacion", "planificador",
@@ -23,6 +24,9 @@ export default Plugin.define({
     const identity = makeIdentity(ctx)
     // Register explicitly: V2 does not expose the legacy tools/ files by itself.
     await ctx.tool.transform((editor) => {
+      // Code Mode mounts namespaced plugin tools as tools.<namespace>.<name>.
+      if (typeof editor.namespace === "function")
+        editor.namespace({ name: "sesion", description: "Registro del encargo: capture_agent_source transfiere una lectura ya obtenida a instantánea dentro del mismo código de Code Mode." })
       for (const [name, definition] of Object.entries({
         agent_settings: agentSettings, architecture_settings: architectureSettings,
         investigator_defaults: investigatorDefaults, planning_settings: planningSettings,
@@ -30,16 +34,29 @@ export default Plugin.define({
         write_planning_originals: writePlanningOriginals, write_planning_deliverables: writePlanningDeliverables,
         write_report_pair: writeReportPair, write_review_documents: writeReviewDocuments,
         session_work: sessionWork, session_artifacts: sessionArtifacts,
+        capture_agent_source: captureAgentSource,
       })) {
         const inputSchema = tool.schema.object(definition.args)
-        const schema = name === "session_work" || name === "session_artifacts" ? inputSchema.strict() : inputSchema
+        const schema = name === "session_work" || name === "session_artifacts" || name === "capture_agent_source" ? inputSchema.strict() : inputSchema
         editor.add({
           name, description: definition.description,
-          input: tool.schema.toJSONSchema(schema, { unrepresentable: "any" }), options: { codemode: false },
+          input: tool.schema.toJSONSchema(schema, { unrepresentable: "any" }),
+          // D05: capture_agent_source only exists for Code Mode so a read result
+          // transfers within the same execute, never re-emitted via the model.
+          // Code Mode mounts plugin tools by namespace (tools.sesion.…, verified
+          // against 2.1.2) and filters them by role permission: it reuses the
+          // existing Code Mode "execute" authorization instead of adding one.
+          options: name === "capture_agent_source"
+            ? { namespace: "sesion", codemode: true, permission: "execute" }
+            : { codemode: false },
           async execute(input, context) {
+            // Code Mode tools share the existing "execute" authorization: the
+            // capture runs inside a code block, so its permission action matches
+            // the registration options instead of a brand-new role permission.
+            const permission = name === "capture_agent_source" ? "execute" : name
             await ctx.permission.assert({ sessionID: context.sessionID, agent: context.agent,
               source: { type: "tool", messageID: context.messageID, id: context.id },
-              action: name, resources: ["*"], save: ["*"] })
+              action: permission, resources: ["*"], save: ["*"] })
             return { content: await definition.execute(schema.parse(input) as never,
               { ...context, resolver: identity } as never) as string }
           },
