@@ -3,7 +3,7 @@ import { spawn } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { join } from "node:path"
-import { executable, opencode } from "../scripts/verify-opencode.mjs"
+import { executable, isTransientTransportFailure, opencode } from "../scripts/verify-opencode.mjs"
 
 export { opencode }
 
@@ -42,19 +42,31 @@ export async function withServer(cwd, env, run, expected = ["planning-test"]) {
     const connected = { ...env, OPENCODE_TEST_SERVER: url }
     // Tanto la comprobación de salud inicial como la primera llamada /api/plugin del bucle de
     // plugins pueden toparse con un fallo transitorio de transporte del CLI contra un servidor
-    // privado recién arrancado (demostrado en suites raíz completas como «Could not reach server …
-    // Transport: The operation timed out», con trama real en el primer sondeo de plugins).
-    // Reintento acotado compartido por ambas llamadas: solo ante esa firma de transporte, con
-    // espera corta de 250 ms y dentro del presupuesto (deadline) ya existente de cada llamada;
-    // si el proceso del servidor muere, se agota el presupuesto o el fallo no es de transporte,
-    // se propaga el error real del CLI sin enmascarar (los plugins fallidos se siguen detectando
-    // en cuanto una llamada tiene éxito: assert.deepEqual(failed, []) solo mira respuestas reales).
+    // privado recién arrancado. Firma original demostrada en suites raíz completas («Could not
+    // reach server … Transport: The operation timed out», trama real en el primer sondeo de
+    // plugins; ver R1-F2/9322e78). Tres firmas más de la misma familia quedaron demostradas sin
+    // cobertura durante el desarrollo y revisión del núcleo S08 (commit 55d127e): «spawnSync
+    // cmd.exe ETIMEDOUT» y «aborted due to timeout» del timeout del spawnSync en
+    // withServer/prepareConsumer (implementador, reproducido 2 veces, superado por repetición
+    // aislada) y «TimeoutError: The operation timed out» en la ruta de verifyOpenCode (revisor).
+    // La CAUSA subyacente de todos ellos permanece INDETERMINADA (misma familia que el
+    // ETIMEDOUT histórico de S05); este reintento no la atribuye ni la resuelve.
+    // Predicado compartido isTransientTransportFailure (definido junto a opencode() en
+    // scripts/verify-opencode.mjs) para que ambos consumidores coincidan exactamente: solo
+    // cubre la familia OBSERVADA de fallos de transporte/arranque del proceso CLI; los errores
+    // de dominio reales del servidor (HTTP 4xx/5xx, plugins fallidos) no contienen estas firmas
+    // y siguen fallando en firme.
+    // Reintento acotado compartido por ambas llamadas, dentro del presupuesto (deadline) ya
+    // existente de cada llamada y con espera corta de 250 ms; si el proceso del servidor muere,
+    // se agota el presupuesto o el fallo no es de la familia, se propaga el error real del CLI
+    // sin enmascarar (los plugins fallidos se siguen detectando en cuanto una llamada tiene
+    // éxito: assert.deepEqual(failed, []) solo mira respuestas reales).
     const retryTransport = async (deadline, fetch) => {
       while (true) {
         try {
           return fetch()
         } catch (error) {
-          if (!/Could not reach server/.test(error.message) || server.exitCode !== null
+          if (!isTransientTransportFailure(error) || server.exitCode !== null
             || server.signalCode !== null || Date.now() >= deadline) throw error
           await new Promise(resolve => setTimeout(resolve, 250))
         }
