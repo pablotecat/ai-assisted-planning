@@ -944,16 +944,23 @@ function classifyWrapper(value: unknown): string {
   if (keys.includes("fields")) return "objeto_campos"
   return "desconocido"
 }
-// Preserves the received representation and identifies which one was obtained:
-// literal text stays untouched; an object is serialized deterministically.
+// Preserves the received representation and identifies which one was obtained.
+// D08 fix: a received STRING keeps its exact bytes even when it contains JSON —
+// the wrapper is classified over the parsed value only to diagnose or enable a
+// known derived view; the original is never re-serialized. A real object is
+// serialized deterministically; literal text stays untouched.
 function normalizeSourceResult(declared: SnapshotInput["representacion"], resultado: SnapshotInput["resultado"]):
   { representacion: "texto_literal" | "objeto_serializado"; content: string; formato: string } {
   if (typeof resultado === "string") {
-    if (declared !== "objeto_serializado") return { representacion: "texto_literal", content: resultado, formato: "texto" }
     const parsed = parsedJson(resultado)
-    if (parsed === undefined || parsed === null || typeof parsed !== "object")
-      throw new Error("La representación declarada no es un objeto serializado válido")
-    return { representacion: "objeto_serializado", content: stableStringify(parsed), formato: classifyWrapper(parsed) }
+    const object = parsed !== null && typeof parsed === "object"
+    if (declared === "objeto_serializado") {
+      // The declared label is kept, but what was received is this string: it is
+      // stored exactly as received after validating it is a serialized object.
+      if (!object) throw new Error("La representación declarada no es un objeto serializado válido")
+      return { representacion: "objeto_serializado", content: resultado, formato: classifyWrapper(parsed) }
+    }
+    return { representacion: "texto_literal", content: resultado, formato: object ? classifyWrapper(parsed) : "texto" }
   }
   if (declared === "texto_literal") throw new Error("Un objeto capturado no se declara como texto literal")
   try {

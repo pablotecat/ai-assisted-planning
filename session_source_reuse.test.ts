@@ -321,6 +321,69 @@ test("S08 8.5 enrutado intacto: las fuentes crudas locales del lector siguen vet
     "El lector sin asignación al encargo del Investigador no consulta sus fuentes")
 })
 
+//// S08 8.2/8.3 — a received string keeps its exact bytes; wrapper classification
+//// over the parsed JSON is diagnosis/known-view only, never a re-serialization. ////
+
+test("S08 8.2 normalización: un string recibido conserva sus bytes exactos aunque declare objeto serializado", async t => {
+  const f = await fixture(t)
+  const w = await f.create("r", { responsable_session_id: "i" })
+  const base = { encargo_id: w.id, corpus: "corpus-autorizado", referencia: "ref-v1", fuente: "APP-1" }
+  // Rojo del orquestador (verify-s08-original-string.mjs): espacios y CRLF del string recibido.
+  const original = '{"b": 1, "a": 2}\r\n'
+  const declared = await f.capture("i", { ...base, operacion_id: "str-decla",
+    representacion: "objeto_serializado" as const, resultado: original })
+  assert.equal(declared.representacion, "objeto_serializado", "La declaración de quien captura se conserva como tal")
+  assert.equal((await f.blob(declared.contenido.sha256)).toString("utf8"), original,
+    "El blob conserva los bytes exactos del string recibido; el JSON válido no se re-serializa")
+  // Un string JSON sin declaración sigue siendo texto literal, con los mismos bytes.
+  const literal = await f.capture("i", { ...base, operacion_id: "str-lit", resultado: original })
+  assert.equal(literal.representacion, "texto_literal")
+  assert.equal((await f.blob(literal.contenido.sha256)).toString("utf8"), original)
+  // Declaraciones incompatibles siguen rechazándose explícitamente.
+  await assert.rejects(f.capture("i", { ...base, operacion_id: "str-mal",
+    representacion: "objeto_serializado" as const, resultado: "no json" }), /objeto serializado/)
+  await assert.rejects(f.capture("i", { ...base, operacion_id: "obj-mal",
+    representacion: "texto_literal" as const, resultado: { a: 1 } }), /texto literal/)
+  // Un objeto verdadero recibido sigue serializándose de forma determinista.
+  const realObject = await f.capture("i", { ...base, operacion_id: "obj-real", resultado: { b: 1, a: [2, { d: 4, c: 3 }] } })
+  assert.equal(realObject.representacion, "objeto_serializado")
+  assert.equal((await f.blob(realObject.contenido.sha256)).toString("utf8"), '{"a":[2,{"c":3,"d":4}],"b":1}',
+    "Serialización determinista por estructura para un objeto real")
+})
+
+test("S08 8.3 envoltorio en string JSON: diagnóstico explícito y original crudo íntegro; formatos conocidos con vista", async t => {
+  const f = await fixture(t)
+  const w = await f.create("r", { responsable_session_id: "i" })
+  const base = { encargo_id: w.id, corpus: "corpus-autorizado", referencia: "ref-v1", fuente: "APP-1" }
+  // Rojo del orquestador (verify-s08-wrapper-string.mjs): Code Mode devuelve strings.
+  const unknown = '{"envoltorioDesconocido":{"contenido":"no inferir ausencia"}}'
+  const capturedUnknown = await f.capture("i", { ...base, operacion_id: "wrap-unknown", resultado: unknown })
+  assert.ok(capturedUnknown.diagnostico, "Un envoltorio desconocido en un string JSON produce diagnóstico en la captura")
+  assert.equal(capturedUnknown.diagnostico.tipo, "envoltorio_desconocido")
+  const viewUnknown = await f.read("i", w.id, capturedUnknown.instantanea_id, capturedUnknown.archivo, { vista: "linea" })
+  assert.equal(viewUnknown.diagnostico.tipo, "envoltorio_no_reconocido")
+  assert.equal(viewUnknown.original.disponible, true)
+  const rawUnknown = await f.read("i", w.id, capturedUnknown.instantanea_id, capturedUnknown.archivo)
+  assert.equal(rawUnknown.contenido, unknown, "El original crudo sigue íntegro y legible")
+  assert.equal((await f.blob(capturedUnknown.contenido.sha256)).toString("utf8"), unknown)
+  // Un wrapper conocido en string JSON con espacios y CRLF conservados: vista línea sin diagnóstico.
+  const known = '{\r\n  "key": "APP-1",\r\n  "fields": { "summary": "s", "comment": { "total": 2 } }\r\n}'
+  const capturedKnown = await f.capture("i", { ...base, operacion_id: "wrap-known", resultado: known })
+  assert.equal(capturedKnown.formato, "jira_issue")
+  assert.equal(capturedKnown.diagnostico, undefined)
+  assert.equal((await f.blob(capturedKnown.contenido.sha256)).toString("utf8"), known,
+    "Los espacios y CRLF del string original se conservan; no se re-serializa")
+  const viewKnown = await f.read("i", w.id, capturedKnown.instantanea_id, capturedKnown.archivo, { vista: "linea" })
+  assert.equal(viewKnown.diagnostico, undefined)
+  assert.deepEqual(viewKnown.lineas.map((line: any) => line.contenido), known.split("\r\n"))
+  assert.equal(viewKnown.cursor, null)
+  // Texto no JSON sigue siendo texto normal con vista.
+  const plain = await f.capture("i", { ...base, operacion_id: "plain", resultado: "Texto plano\r\nlínea 2" })
+  assert.equal(plain.formato, "texto")
+  const viewPlain = await f.read("i", w.id, plain.instantanea_id, plain.archivo, { vista: "linea" })
+  assert.deepEqual(viewPlain.lineas.map((line: any) => line.contenido), ["Texto plano", "línea 2"])
+})
+
 //// Real private server: reuse flow with a programmed provider, zero real models. ////
 
 test("S08 8.4 motor privado: dos preguntas con recorrido común, una sola lectura remota observada", { timeout: 300_000 }, async t => {
