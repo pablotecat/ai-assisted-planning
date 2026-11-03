@@ -3,9 +3,10 @@ import { spawnSync } from "node:child_process"
 import { createServer } from "node:http"
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { pathToFileURL } from "node:url"
 import test from "node:test"
 import { captureSessions, privateRequest, runBounded } from "./test-support/delegation/verify-model.mjs"
-import { consent, evidenceWriter, hash, prepareConsumer, resolveModel, reviewChecklist, runCase, sanitize, verifyReads, verifyReport } from "./test-support/evidence-model/verify-model.mjs"
+import { consent, evidenceWriter, hash, prepareConsumer, providerPluginWrapper, resolveModel, resolveProviderPlugin, reviewChecklist, runCase, sanitize, verifyReads, verifyReport } from "./test-support/evidence-model/verify-model.mjs"
 import { descriptions, prompt, unavailable } from "./test-support/evidence-model/data.mjs"
 import { withServer } from "./test-support/opencode.mjs"
 
@@ -39,6 +40,30 @@ test("S02 modelo: parámetro configurable validado sintácticamente, declarado y
   const refused = { ...process.env, OPENCODE_EVIDENCE_MODEL_CONSENT: "", OPENCODE_EVIDENCE_FLOW_MS: "1000", OPENCODE_EVIDENCE_WINDOW_MS: "32000", OPENCODE_EVIDENCE_MODEL: "fixture/test" }
   const result = spawnSync(process.execPath, ["test-support/evidence-model/verify-model.mjs"], { cwd: import.meta.dirname, env: refused, encoding: "utf8", timeout: 5000 })
   assert.notEqual(result.status, 0); assert.match(result.stderr, /opt-in required/)
+})
+
+test("S02 proveedor externo: ruta absoluta de plugin validada sin copiar, editar ni cargar", async () => {
+  assert.equal(await resolveProviderPlugin(undefined), undefined)
+  assert.equal(await resolveProviderPlugin(""), undefined)
+  const root = await mkdtemp(join(temp, "s02-plugin-"))
+  const plugin = join(root, "provider.js")
+  await writeFile(plugin, "// synthetic path check only; this file is never loaded or executed by the test\n")
+  assert.equal(await resolveProviderPlugin(plugin), pathToFileURL(plugin).href)
+  const wrapperRunDir = join(root, "wrapper")
+  await mkdir(wrapperRunDir)
+  const wrapper = await providerPluginWrapper(wrapperRunDir, pathToFileURL(plugin).href)
+  assert.deepEqual([wrapper.entry, wrapper.index].map(url => url.replace(/\\/g, "/")),
+    [pathToFileURL(join(root, "wrapper", "provider-plugin")).href, join(root, "wrapper", "provider-plugin", "index.js").replace(/\\/g, "/")])
+  const generated = await readFile(wrapper.index, "utf8")
+  assert.match(generated, new RegExp(`export \\{ default \\} from ${JSON.stringify(pathToFileURL(plugin).href)}`))
+  assert.ok(generated.includes("read-only") && generated.includes("never copied"), "Wrapper must document read-only loading")
+  assert.ok(!generated.includes("forge"), "Wrapper must not inline plugin content")
+  await mkdir(join(root, "dir"))
+  await writeFile(join(root, "provider.txt"), "// exists but is not a plugin file\n")
+  await assert.rejects(resolveProviderPlugin("relative/provider.js"), /absolute path/)
+  await assert.rejects(resolveProviderPlugin(join(root, "missing.js")), /not readable/)
+  await assert.rejects(resolveProviderPlugin(join(root, "dir")), /must be a file/)
+  await assert.rejects(resolveProviderPlugin(join(root, "provider.txt")), /\.js\/\.cjs\/\.mjs/)
 })
 
 test("S02 privacidad: contenido sintético íntegro, sin secretos conocidos/cabeceras/native/razonamiento", () => {
@@ -202,7 +227,9 @@ test("S02 motor privado: preparación V2 instalada, Jira sintético y driver com
   })
   await new Promise<void>(resolve => provider.listen(0, "127.0.0.1", resolve))
   t.after(() => { provider.closeAllConnections(); provider.close() })
-  const { host, env, config, settings } = await prepareConsumer(root, { providerID: "fixture", id: "test" })
+  const { host, env, config, settings } = await prepareConsumer(root, { providerID: "fixture", id: "test" }, undefined)
+  assert.deepEqual(settings.plugins, [new URL("./test-support/delegation", import.meta.url).href,
+    new URL("./test-support/evidence-model/fixture", import.meta.url).href], "Without OPENCODE_EVIDENCE_PROVIDER_PLUGIN the installed plugins must be exactly the historical two")
   settings.policies = [{ action: "provider.use", resource: "*", effect: "deny" }, { action: "provider.use", resource: "fixture", effect: "allow" }]
   settings.providers = { fixture: { name: "Programmed; not a model", package: "@opencode/ai/providers/openai-compatible",
     settings: { apiKey: "synthetic", baseURL: `http://127.0.0.1:${(provider.address() as any).port}/v1` }, models: { test: { capabilities: { tools: true } } } } }

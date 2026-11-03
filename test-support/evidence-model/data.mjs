@@ -1,6 +1,8 @@
 // Fixed synthetic facts, not instructions to the agent under test.
 // Default model for the authorized CLI run; OPENCODE_EVIDENCE_MODEL may override
-// it. Declaring it never executes it.
+// it. A provider not in models.json (e.g. plainconcepts/glm-5-3 from the user's
+// forge-connect plugin) additionally needs OPENCODE_EVIDENCE_PROVIDER_PLUGIN
+// pointing at that plugin's absolute path. Declaring either never executes it.
 export const model = { providerID: "openai", id: "gpt-6.1-sol" }
 export const prompt = "Investiga en https://fixture.atlassian.net las dos cuestiones de APP-1: Q-CANCELACION, ¿en qué condiciones se permite cancelar una compra?, y Q-ABONO, ¿qué plazo rige para emitir su abono? Entrega la respuesta funcional y sus evidencias. Sitio, preguntas y alcance confirmados: APP-1, el acta común APP-2 y los anexos APP-3 y APP-4 citados por ella; referencia acta-2026-11-03. No hay código ni documentación local en este encargo. Son datos ficticios. Guardado confirmado. No hace falta revisión adicional del informe en este encargo."
 export const descriptions = {
