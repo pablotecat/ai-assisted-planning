@@ -420,7 +420,110 @@ function turnsOf(messages, from, to) {
   return turns
 }
 
-export function reduceDiagnostics(data, { rootID, descendants = "all", exclude = [], from, to } = {}) {
+const modelRef = model => model && opaque(model.providerID) && typeof model.id === "string" && /^[a-zA-Z0-9_.:/-]{1,200}$/.test(model.id)
+  ? { providerID: model.providerID, id: model.id, ...(opaque(model.variant) ? { variant: model.variant } : {}) } : undefined
+const sameModel = (a, b) => a && b && a.providerID === b.providerID && a.id === b.id && a.variant === b.variant
+
+// A recommendation is not a retry, a model-change permission, or evidence of the cause of a timeout.
+function recoveryDiagnostics(sessions, observations = {}, from, to) {
+  const byID = new Map(sessions.map(s => [s.id, s]))
+  const recoveries = [], seen = new Set()
+  for (const record of observations.recoveries ?? []) {
+    if (!byID.has(record.sessionID) || !inRange(record.at, from, to)) continue
+    const session = byID.get(record.sessionID), message = session.messages?.find(m => m.id === record.messageID)
+    if (!opaque(record.id) || !message || message.type !== "assistant" || !sources.includes(record.provenance) || message.time.created > record.at)
+      throw new Error("Recuperación sin mensaje, identidad o procedencia verificable.")
+    const key = operationKey(session.id, record.id)
+    if (seen.has(key)) throw new Error("Recuperación duplicada.")
+    seen.add(key)
+    const tool = toolsOf(message).find(tool => tool.id === record.operationID)
+    if (record.operationID && (!tool || tool.time?.created > record.at)) throw new Error("Operación de recuperación no verificable.")
+    const ran = finite(tool?.time?.ran) && tool.time.ran <= record.at
+    const completed = ran && finite(tool.time.completed) && tool.time.completed <= record.at && tool.state?.status === "completed"
+    let phase = completed ? "completed" : ran ? "started" : "undetermined"
+    if (finite(record.beforeExecutionAt) && record.provenance === "original-event") {
+      if (record.beforeExecutionAt < message.time.created || record.beforeExecutionAt > record.at ||
+          toolsOf(message).some(t => finite(t.time?.ran) && t.time.ran <= record.at))
+        throw new Error("Marca anterior a ejecución incompatible con el historial.")
+      phase = "before-execution"
+    }
+    let effect
+    if (record.effectsOperationID) {
+      const inventorySession = byID.get(record.effectsSessionID)
+      const inventory = inventorySession?.messages?.flatMap(toolsOf).find(t => t.id === record.effectsOperationID)
+      if (!inventory || inventory.name !== "session_artifacts" || inventory.state?.status !== "completed" ||
+          !finite(inventory.time?.completed) || inventory.time.completed > record.at || inventory.state.input?.action !== "list")
+        throw new Error("Consulta de efectos no verificable en el intervalo.")
+      if (tool && publishers.has(tool.name) && tool.state?.input?.operacion_id && tool.state.input.encargo_id === inventory.state.input.encargo_id) {
+        for (const content of inventory.state.content ?? []) {
+          if (content.type !== "text") continue
+          let result
+          try { result = JSON.parse(content.text) } catch { continue }
+          const artifact = result.artefactos?.find(a => a.producerSessionID === session.id && a.producerMessageID === message.id &&
+            a.workID === tool.state.input.encargo_id && a.operacion_id === tool.state.input.operacion_id && a.type === tool.name &&
+            opaque(a.id) && /^[a-f0-9]{64}$/.test(a.manifestHash))
+          if (artifact) effect = { artifactID: artifact.id, manifestHash: artifact.manifestHash,
+            workID: opaque(artifact.workID), operationID: opaque(artifact.operacion_id) }
+        }
+      }
+    }
+    if (effect) phase = record.responseLost === true ? "completed-response-lost" : "completed"
+    else if (completed && record.responseLost === true) phase = "completed-response-lost"
+    let quota
+    if (record.reason === "quota") {
+      const resetAt = finite(record.resetAt) ? record.resetAt : undefined
+      const waitMs = resetAt === undefined ? null : Math.max(0, resetAt - record.at)
+      const change = record.change, expected = modelRef(change?.model)
+      const receipt = record.selection
+      const selected = receipt?.session_id === session.id && receipt.estado === "observado" && receipt.procedencia === "session.get" &&
+        finite(receipt.comprobado_en) && receipt.comprobado_en <= record.at ? modelRef(receipt.modelo) : undefined
+      const verified = change?.authorized === true && expected && selected && finite(change.at) &&
+        receipt.comprobado_en >= change.at && sameModel(expected, selected)
+      quota = { resetAt, wait: metric(waitMs, "ms", waitMs === null ? "unknown" : "complete", record.provenance),
+        action: change ? change.authorized !== true ? "ask-user-no-change" : verified ? "selection-verified-check-effects" : "verify-directed-change"
+          : waitMs > 0 ? "inform-wait" : "ask-user-or-check-reset",
+        ...(selected ? { selectedModel: selected } : {}), ...(expected ? { requestedModel: expected } : {}) }
+    }
+    recoveries.push({ id: record.id, sessionID: session.id, messageID: message.id, operationID: opaque(record.operationID),
+      at: record.at, reason: ["quota", "transport"].includes(record.reason) ? record.reason : "unknown", phase,
+      next: effect ? "reuse-confirmed-effect" : "inspect-work-and-artifacts-before-repeat", effect, quota,
+      provenance: record.provenance, coverage: "partial" })
+  }
+  return recoveries
+}
+
+function activityDiagnostics(sessions, observations = {}, from, to, alerts) {
+  if (!alerts) return undefined
+  if (!finite(alerts.thresholdMs) || alerts.thresholdMs <= 0 || !["measured", "agreed"].includes(alerts.basis))
+    throw new Error("Las alertas requieren umbral positivo y base measured/agreed.")
+  const active = sessions.flatMap(session => {
+    const last = [...(session.messages ?? [])].filter(m => inRange(m.time?.created, from, to) && ["assistant", "user", "idle", "synthetic"].includes(m.type))
+      .sort((a, b) => a.time.created - b.time.created).at(-1)
+    return last && last.type !== "idle" && (!finite(last.time.completed) || last.time.completed >= to) ? [{ session, message: last }] : []
+  })
+  const notices = []
+  for (const { session, message } of active) {
+    const elapsed = to - message.time.created
+    if (elapsed < alerts.thresholdMs) continue
+    const tools = toolsOf(message).filter(t => finite(t.time?.ran) && t.time.ran < to && (!finite(t.time.completed) || t.time.completed >= to))
+    const children = active.filter(a => a.session.parentID === session.id).map(a => a.session.id)
+    const progress = (observations.timings ?? []).filter(r => r.kind === "tool-progress" && r.sessionID === session.id &&
+      r.messageID === message.id && sources.includes(r.provenance) && inRange(r.at, from, to) &&
+      tools.some(t => t.id === r.operationID && r.at >= t.time.ran))
+    const first = (observations.timings ?? []).find(r => r.kind === "first-event" && r.sessionID === session.id &&
+      r.messageID === message.id && r.provenance === "original-event")
+    const noFirst = !tools.length && !children.length && first && !finite(first.firstEventAt) && finite(first.observedThrough) && first.observedThrough >= to
+    const state = tools.length ? progress.length ? "tool-with-progress" : "active-tool" : children.length ? "active-children"
+      : noFirst ? "no-first-event-observed" : "first-event-unknown"
+    notices.push({ sessionID: session.id, messageID: message.id, severity: "informational", state,
+      elapsed: metric(elapsed, "ms", "partial"), activeChildIDs: children, activeToolIDs: tools.map(t => opaque(t.id)).filter(Boolean),
+      lastProgressAt: progress.length ? Math.max(...progress.map(r => r.at)) : undefined,
+      firstEventCoverage: noFirst ? "observed-absence" : "unknown", cause: "undetermined" })
+  }
+  return { mode: "one-shot-informational", thresholdMs: alerts.thresholdMs, basis: alerts.basis, asOf: to, notices }
+}
+
+export function reduceDiagnostics(data, { rootID, descendants = "all", exclude = [], from, to, alerts } = {}) {
   if (data.schemaVersion !== 1 || !Array.isArray(data.sessions)) throw new Error("Formato de entrada no compatible.")
   if (!opaque(rootID) || exclude.some(id => !opaque(id)) || !finite(from) || !finite(to) || from >= to) throw new Error("Raíz o intervalo [from,to) no válido.")
   const selected = selectSessions(data.sessions, { rootID, descendants, exclude })
@@ -445,6 +548,8 @@ export function reduceDiagnostics(data, { rootID, descendants = "all", exclude =
   })
   const operations = operationDiagnostics(selected, data.observations, from, to, provenance)
   const temporal = temporalDiagnostics(selected, operations.operations, data.observations, from, to, provenance)
+  const recoveries = recoveryDiagnostics(selected, data.observations, from, to)
+  const activity = activityDiagnostics(selected, data.observations, from, to, alerts)
   return { schemaVersion: 1, rootID, interval: { from, to, boundary: "[from,to)" },
     acquisition: { version: opaque(data.acquisition?.version), source: provenance,
       started: finite(data.acquisition?.started) ? data.acquisition.started : undefined,
@@ -457,6 +562,7 @@ export function reduceDiagnostics(data, { rootID, descendants = "all", exclude =
     operations: operations.operations, incidents: operations.incidents,
     timing: { metrics: temporal.metrics, queue: temporal.queue, waits: temporal.waits, deliveries: temporal.deliveries, firstEvents: temporal.firstEvents }, usage: temporal.usage,
     counts: { sessions: metric(sessions.length, "sessions"), messages: metric(sessions.reduce((sum, session) => sum + session.messages.length, 0), "messages"), ...operations.counts },
+    ...(recoveries.length ? { recoveries } : {}), ...(activity ? { activity } : {}),
     limitations: ["projected-history-not-live-events", "native-internal-operations-not-observable", "native-first-provider-event-absent", "native-notification-and-integration-absent", "no-comparable-baseline"],
   }
 }
@@ -478,6 +584,9 @@ export function formatDiagnostics(report, format = "json") {
     ...report.usage.declarations.map(item => `| declarado.${item.name} (${item.sessionID}) | ${item.value} | ${item.unit} | ${item.coverage} | ${item.provenance} |`),
     "", "## Sesiones", "", ...report.sessions.map(session => `- \`${session.id}\`; padre: ${session.parentID ?? "—"}; ${session.messages.length} mensajes; ${session.turns.length} turnos reconstruidos.`),
     "", "## Incidentes", "", ...report.incidents.map(incident => `- \`${incident.id}\` (${incident.sessionID}): ${incident.category}; estado ${incident.status ?? "no determinado"}; ${incident.attempts} intentos correlacionados; ${incident.references.length} referencias; ${incident.provenance}.`),
+    ...(report.recoveries?.length ? ["", "## Recuperación (informativa)", "", ...report.recoveries.map(r => `- \`${r.sessionID}\` / \`${r.id}\`: ${r.phase}; ${r.next}; causa ${r.reason}; ${r.provenance}, ${r.coverage}.${r.quota ? ` Cuota: ${r.quota.action}; espera ${r.quota.wait.value ?? "no determinada"} ms; reset ${r.quota.resetAt ?? "no determinado"}.` : ""}`)] : []),
+    ...(report.activity ? ["", "## Actividad opt-in", "", `Umbral: ${report.activity.thresholdMs} ms (${report.activity.basis}); consulta puntual, sin acciones automáticas.`,
+      ...report.activity.notices.map(n => `- \`${n.sessionID}\`: ${n.state}; ${n.elapsed.value} ms; hijos activos ${n.activeChildIDs.length}; causa no determinada.`)] : []),
     "", "## Reservas", "", ...report.limitations.map(item => `- ${item}`), ""].join("\n")
 }
 
@@ -488,12 +597,18 @@ export async function main(args = process.argv.slice(2)) {
     "exclude-session": { type: "string", multiple: true, default: [] },
     server: { type: "string" }, input: { type: "string" }, format: { type: "string", default: "json" },
     "page-size": { type: "string", default: "200" }, help: { type: "boolean" },
+    "alert-after-ms": { type: "string" }, "alert-basis": { type: "string" },
   } })
-  if (values.help) return "node scripts/session-diagnostics.mjs --root <id> --from <ms> --to <ms> --audit-session <id> [--descendants all|none|id,id] [--input <fixture.json>] [--server <url>] [--format json|markdown]\n"
+  if (values.help) return "node scripts/session-diagnostics.mjs --root <id> --from <ms> --to <ms> --audit-session <id> [--descendants all|none|id,id] [--input <fixture.json>] [--server <url>] [--format json|markdown] [--alert-after-ms <ms> --alert-basis measured|agreed]\nAlertas opt-in puntuales e informativas; sin watcher, cancelación, reintentos ni cambios de modelo.\n"
   if (!values["audit-session"] || !opaque(values["audit-session"])) throw new Error("Indica la sesión de auditoría separada mediante --audit-session.")
   const options = { rootID: values.root, from: Number(values.from), to: Number(values.to),
     descendants: ["all", "none"].includes(values.descendants) ? values.descendants : values.descendants.split(","),
     exclude: [...new Set([...values["exclude-session"], values["audit-session"]])] }
+  if (values["alert-after-ms"] !== undefined || values["alert-basis"] !== undefined) {
+    options.alerts = { thresholdMs: Number(values["alert-after-ms"]), basis: values["alert-basis"] }
+    if (!finite(options.alerts.thresholdMs) || options.alerts.thresholdMs <= 0 || !["measured", "agreed"].includes(options.alerts.basis))
+      throw new Error("Indica --alert-after-ms positivo y --alert-basis measured|agreed.")
+  }
   // Validate the selection before contacting a server. stdout contains only the sanitized report.
   if (!opaque(options.rootID) || !finite(options.from) || !finite(options.to) || options.from >= options.to || options.exclude.includes(options.rootID)
     || options.exclude.some(id => !opaque(id)) || (Array.isArray(options.descendants) && options.descendants.some(id => !opaque(id)))

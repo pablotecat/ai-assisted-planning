@@ -1,7 +1,17 @@
 import type { Plugin } from "@opencode/plugin"
 import type { Resolver } from "./session_store.ts"
 
-export function makeIdentity(ctx: Pick<Plugin.Context, "session">): Resolver {
+type ModelSelection = { providerID: string; id: string; variant?: string }
+type ModelResolver = Resolver & { model?: (id: string) => Promise<ModelSelection | undefined> }
+
+// Call only after session_work has verified the assignment. No arbitrary session input or change channel.
+export async function workModel(get: ModelResolver, sessionID: string, now = Date.now) {
+  const model = await get.model?.(sessionID)
+  return { session_id: sessionID, estado: model ? "observado" : "no_disponible",
+    procedencia: "session.get", alcance: "siguientes_solicitudes", comprobado_en: now(), ...(model ? { modelo: model } : {}) }
+}
+
+export function makeIdentity(ctx: Pick<Plugin.Context, "session">): ModelResolver {
   const resolver: Resolver = async (id, messageID) => {
     const session = await ctx.session.get({ sessionID: id })
     if (!session || session.id !== id) throw new Error("Sesión OpenCode no verificable")
@@ -24,5 +34,13 @@ export function makeIdentity(ctx: Pick<Plugin.Context, "session">): Resolver {
       text: message.content.filter(part => part.type === "text").map(part => part.text).join("\n"),
       active: message.content.some(part => part.type === "tool" && ["pending", "running"].includes(part.state.status)) } : {}),
   }))
-  return resolver
+  const identity: ModelResolver = resolver
+  identity.model = async id => {
+    const session = await ctx.session.get({ sessionID: id })
+    if (session.id !== id) throw new Error("Selección de otra sesión OpenCode")
+    // An absent selection is not the parent's model, the default, or the last request's model.
+    return session.model ? { providerID: session.model.providerID, id: session.model.id,
+      ...(session.model.variant ? { variant: session.model.variant } : {}) } : undefined
+  }
+  return identity
 }
