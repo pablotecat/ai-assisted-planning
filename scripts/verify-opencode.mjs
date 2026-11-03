@@ -23,13 +23,25 @@ export function opencode(args, cwd, env = process.env) {
 // verifyOpenCode durante el setup). Predicado compartido con test-support/opencode.mjs
 // para que ambos reintentos coincidan exactamente. Solo cubre fallos de arranque o
 // transporte del proceso CLI: los errores de dominio del servidor (HTTP 4xx/5xx,
-// plugins fallidos, respuestas inválidas) no contienen estas firmas y se siguen
-// propagando en firme en ambos consumidores.
+// plugins fallidos, respuestas inválidas) se propagan en firme en ambos consumidores
+// (los HTTP 4xx/5xx mediante descarte explícito previo, ver httpDomainFailure).
 const transientCliTransportFailure =
   /Could not reach server|spawnSync \S+ ETIMEDOUT|aborted due to timeout|TimeoutError: The operation timed out/
 
+// Rechazo previo MÍNIMO de errores de dominio identificados (F5/F8, revisión
+// independiente de 98cce13): el matching por subcadena solo no distingue un mensaje
+// HTTP 4xx/5xx que ADEMÁS contenga una firma transitoria — caso demostrado por el
+// revisor: new Error('HTTP 502 Bad Gateway: upstream "aborted due to timeout"') —
+// y el encargo exige que esos errores fallen en firme. Todo mensaje que declare un
+// código HTTP 4xx/5xx se descarta ANTES de evaluar las firmas, aunque las contenga.
+// Mismo alcance mínimo que las firmas: identificado y observado, no clasificación
+// exhaustiva de otros errores de dominio.
+const httpDomainFailure = /\bHTTP[ \t]+[45]\d{2}\b/
+
 export function isTransientTransportFailure(error) {
-  return transientCliTransportFailure.test(String(error?.message ?? ""))
+  const message = String(error?.message ?? "")
+  if (httpDomainFailure.test(message)) return false
+  return transientCliTransportFailure.test(message)
 }
 
 export async function verifyOpenCode(host = process.cwd()) {
@@ -68,6 +80,11 @@ export async function verifyOpenCode(host = process.cwd()) {
     // familia de fallos transitorios de transporte que withServer (predicado compartido
     // isTransientTransportFailure): reintento acotado al deadline de 30 s YA EXISTENTE del bucle,
     // espera corta de 250 ms; sin cambiar arranque/URL, plugins esperados ni la función api().
+    // El deadline de 30 s acota la DECISIÓN de reintentar, no es un límite duro de pared:
+    // una api() ya en vuelo al llegar el deadline sigue su curso (spawnSync con su timeout
+    // propio de 120 s, sin tocar), de modo que la duración total de este arranque puede
+    // superar los 30 s (observación F7 de la revisión de 98cce13, preexistente: se aclara
+    // sin cambiar timeout alguno).
     // No enmascara fallos reales: los plugins fallidos se detectan en cuanto una llamada tiene
     // éxito (el throw de failed.length se evalúa solo sobre respuestas realmente obtenidas), si
     // el proceso servidor muere (exitCode/signalCode) se propaga el error real del CLI y, si el
