@@ -41,19 +41,22 @@ export default Plugin.define({
         editor.add({
           name, description: definition.description,
           input: tool.schema.toJSONSchema(schema, { unrepresentable: "any" }),
-          // D05: capture_agent_source only exists for Code Mode so a read result
+          // D05/D08: capture_agent_source only exists for Code Mode so a read result
           // transfers within the same execute, never re-emitted via the model.
           // Code Mode mounts plugin tools by namespace (tools.sesion.…, verified
-          // against 2.1.2) and filters them by role permission: it reuses the
-          // existing Code Mode "execute" authorization instead of adding one.
+          // against 2.1.2) and filters them by role permission: the declared
+          // "sesion_capture_agent_source" action is a dedicated authorization, so
+          // only the roles with that allow see the tool in their sandbox. Every
+          // Code Mode role keeps "execute"; the capture does not grant tools[alias].
           options: name === "capture_agent_source"
-            ? { namespace: "sesion", codemode: true, permission: "execute" }
+            ? { namespace: "sesion", codemode: true, permission: "sesion_capture_agent_source" }
             : { codemode: false },
           async execute(input, context) {
-            // Code Mode tools share the existing "execute" authorization: the
-            // capture runs inside a code block, so its permission action matches
-            // the registration options instead of a brand-new role permission.
-            const permission = name === "capture_agent_source" ? "execute" : name
+            // The capture runs inside a code block, but it does not borrow the
+            // Code Mode "execute" authorization: its dedicated action matches the
+            // registration options, so denials are auditable per role instead of
+            // implicit for anyone who can execute code.
+            const permission = name === "capture_agent_source" ? "sesion_capture_agent_source" : name
             await ctx.permission.assert({ sessionID: context.sessionID, agent: context.agent,
               source: { type: "tool", messageID: context.messageID, id: context.id },
               action: permission, resources: ["*"], save: ["*"] })

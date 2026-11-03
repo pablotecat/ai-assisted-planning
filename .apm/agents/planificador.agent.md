@@ -23,6 +23,7 @@ permission:
   agent_settings: allow
   session_work: allow
   session_artifacts: allow
+  sesion_capture_agent_source: allow
   write_planning_originals: allow
   write_planning_deliverables: allow
   "atlassian_*": deny

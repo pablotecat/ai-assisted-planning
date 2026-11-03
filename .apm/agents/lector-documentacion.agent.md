@@ -17,6 +17,7 @@ permission:
   agent_settings: allow
   session_work: allow
   session_artifacts: allow
+  sesion_capture_agent_source: allow
   publish_agent_deliverable: allow
   edit: deny
   task:

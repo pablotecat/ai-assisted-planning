@@ -49,11 +49,11 @@ test("S08 registro: capture_agent_source es la decimotercera herramienta, de Cod
   const context = { sessionID: "x", messageID: "mensaje", id: "call", agent: "investigador" }
   await assert.rejects(tools.capture_agent_source.execute({}, context), /required|invalid|expected/i,
     "El esquema estricto rechaza entradas vacías")
-  // The capture shares the existing Code Mode "execute" authorization; it does
-  // not add a new role permission (options.permission in the registration).
+  // The capture keeps its own dedicated authorization: it does not borrow the
+  // Code Mode "execute" action (options.permission in the registration).
   assert.deepEqual(permissions[0], { sessionID: "x", agent: "investigador",
     source: { type: "tool", messageID: "mensaje", id: "call" },
-    action: "execute", resources: ["*"], save: ["*"] })
+    action: "sesion_capture_agent_source", resources: ["*"], save: ["*"] })
 })
 
 //// Deterministic fixtures shared by 8.2 and 8.3. ////

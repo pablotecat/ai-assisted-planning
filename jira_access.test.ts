@@ -459,6 +459,17 @@ test("distribución APM e instalación idempotente conservan permisos y ajustes 
       for (const agent of [...jiraAgents, "lector-codigo", "arquitecto-test"])
         assert.equal(probe(host, toolEnv, { agent, checks: [{ action: name, resource: "*" }] }).decisions[`${name}:*`], "allow", `${agent}: ${name}`)
     }
+    // S08: capture stays a dedicated Code Mode permission. Every Code Mode role keeps
+    // "execute"; only the producers authorized in D05/D08 obtain the capture allow.
+    // Revisor verifies snapshots instead of capturing, and the roles without Code
+    // Mode obtain neither the tool nor the action.
+    for (const [agent, expected] of Object.entries({
+      investigador: "allow", planificador: "allow", refinador: "allow", arquitecto: "allow",
+      "lector-documentacion": "allow",
+      revisor: "deny", "lector-codigo": "deny", "arquitecto-test": "deny",
+    }))
+      assert.equal(probe(host, toolEnv, { agent, checks: [{ action: "sesion_capture_agent_source", resource: "*" }] })
+        .decisions["sesion_capture_agent_source:*"], expected, `${agent}: permiso dedicado de captura`)
     for (const name of ["consulta-jira", "operativa-comun"]) {
       const result = probe(host, toolEnv, { agent: "investigador", tool: "skill", args: { id: name } })
       assert.ok(JSON.stringify(result.result).includes(`# ${name === "consulta-jira" ? "Consulta Jira" : "Operativa común"}`))

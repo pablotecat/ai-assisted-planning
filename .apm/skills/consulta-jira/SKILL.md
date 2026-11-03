@@ -16,7 +16,7 @@ Para una historia conocida usa `getJiraIssue` con su clave o ID. `fetch` necesit
 ## Dato puntual de una historia conocida
 
 1. Lee únicamente los campos necesarios y respeta el formato pedido. Para «solo el título», llama a `getJiraIssue` con `fields: ["summary"]` y devuelve únicamente el valor literal de `summary`, sin encabezados, comillas ni explicación.
-2. Cierra al devolver el dato; si falla el acceso, comunica el impedimento concreto. La clave delimita esta lectura: no requiere seleccionar proyecto o sprint, cargar valores por defecto ni guardar configuración. Esta rama no activa delegación, originales, publicación, revisión ni etiquetas de suficiencia.
+2. Cierra al devolver el dato; si falla el acceso, comunica el impedimento concreto. La clave delimita esta lectura: no requiere seleccionar proyecto o sprint, cargar valores por defecto ni guardar configuración. Esta rama no activa delegación, captura de instantáneas, persistencia de originales, publicación, revisión ni etiquetas de suficiencia.
 
 ## Búsqueda y selección de alcance
 
@@ -27,6 +27,7 @@ Para una historia conocida usa `getJiraIssue` con su clave o ID. `fetch` necesit
 
 1. Por cada historia seleccionada recupera clave, URL, título, estado, fecha de actualización, descripción, criterios completos en todos sus campos, todos los comentarios paginados con autor, fecha e identificador y las referencias disponibles de adjuntos y vínculos. Una vista compacta no demuestra que los criterios o campos personalizados estén vacíos: pide los campos necesarios o la vista que los incluya. Los comentarios se leen mediante su operación específica; su contador no es su contenido.
 2. Conserva el texto literal separado del análisis. Una síntesis no sustituye al original. Identifica datos inaccesibles, adjuntos no leídos y páginas pendientes; devuelve siempre el contenido recuperado, incluso con guardado desactivado. Cierra cuando cada historia tiene su original recuperado o su límite de acceso explícito.
+3. En un encargo registrado, transfiere cada original leído directamente dentro del mismo código de Code Mode, sin retranscripción del modelo: `const original = await tools[alias].operacion(...)` y a continuación `await tools.sesion.capture_agent_source({encargo_id, corpus, referencia, fuente, operacion_id, resultado: original})`, con el alias realmente usado (`jira` o `atlassian`). Conserva la representación recibida (texto literal tal cual u objeto que el runtime serializa de forma determinista) y declara `paginas`, `campos`, `pendientes` y `version` observados: una página parcial no declara la fuente completa y un envoltorio desconocido se conserva y diagnostica, nunca se interpreta como ausencia. La captura exige el permiso dedicado `sesion_capture_agent_source`; si tu rol no lo tiene, entrega el original recuperado y reporta el impedimento. Una versión que cambia durante la recuperación añade instantánea con aviso, sin sobrescribir la anterior. La instantánea se lee después por su `instantanea_id` y `archivo` con `session_artifacts`, según [inventario y lectura íntegra](../operativa-comun/references/publicacion-revision.md#inventario-y-lectura-íntegra); con guardado desactivado la captura devuelve exactamente `{guardado:false}` y el original queda en el contexto recibido.
 
 ## Investigación o cotejo de fuentes
 
