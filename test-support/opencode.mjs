@@ -40,10 +40,30 @@ export async function withServer(cwd, env, run, expected = ["planning-test"]) {
       })
     })
     const connected = { ...env, OPENCODE_TEST_SERVER: url }
-    api("get", "/api/location", cwd, connected)
+    // Tanto la comprobación de salud inicial como la primera llamada /api/plugin del bucle de
+    // plugins pueden toparse con un fallo transitorio de transporte del CLI contra un servidor
+    // privado recién arrancado (demostrado en suites raíz completas como «Could not reach server …
+    // Transport: The operation timed out», con trama real en el primer sondeo de plugins).
+    // Reintento acotado compartido por ambas llamadas: solo ante esa firma de transporte, con
+    // espera corta de 250 ms y dentro del presupuesto (deadline) ya existente de cada llamada;
+    // si el proceso del servidor muere, se agota el presupuesto o el fallo no es de transporte,
+    // se propaga el error real del CLI sin enmascarar (los plugins fallidos se siguen detectando
+    // en cuanto una llamada tiene éxito: assert.deepEqual(failed, []) solo mira respuestas reales).
+    const retryTransport = async (deadline, fetch) => {
+      while (true) {
+        try {
+          return fetch()
+        } catch (error) {
+          if (!/Could not reach server/.test(error.message) || server.exitCode !== null
+            || server.signalCode !== null || Date.now() >= deadline) throw error
+          await new Promise(resolve => setTimeout(resolve, 250))
+        }
+      }
+    }
+    await retryTransport(Date.now() + 30_000, () => api("get", "/api/location", cwd, connected))
     const deadline = Date.now() + 30_000
     while (true) {
-      const plugins = api("get", "/api/plugin", cwd, connected).data
+      const plugins = (await retryTransport(deadline, () => api("get", "/api/plugin", cwd, connected))).data
       const failed = plugins.filter(plugin => plugin.state.status === "failed")
       assert.deepEqual(failed, [], JSON.stringify(failed))
       if (expected.every(id => plugins.some(plugin => plugin.id === id && plugin.state.status === "active"))) break
