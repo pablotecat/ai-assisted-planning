@@ -8,7 +8,7 @@ import { once } from "node:events"
 import { pathToFileURL } from "node:url"
 import test from "node:test"
 import { readAgentSettings } from "./tools/agent_settings.ts"
-import { manifest, publishReview, publishSession, type FileOrigin, type Identity, type Verdict } from "./tools/session_store.ts"
+import { manifest, publishReview, publishSession, sessionArtifacts, sessionWork, type FileOrigin, type Identity, type Verdict } from "./tools/session_store.ts"
 import { fileInput } from "./tools/define_tool.ts"
 import planningPublisher from "./tools/write_planning_deliverables.ts"
 
@@ -758,6 +758,64 @@ test("versiones: revisión tardía parcial de v1 no revisa v2; promoción no her
       assert.equal(manifest(Object.fromEntries(await Promise.all(artifact.files.map(async (file: any) =>
         [file.path, await readFile(join(result.sesion, file.path))])))).hash, result.hash_manifiesto)
     }
+  } finally { await rm(f.dir, { recursive: true, force: true }) }
+})
+
+test("versiones por encargo: dos encargos de la misma sesión productora no mezclan sus punteros", async () => {
+  const f = await transactionFixture()
+  try {
+    f.nodes.revOther = { ...f.nodes.review, id: "revOther", parentID: "other" }
+    const actor = (id: string) => ({ sessionID: id, agent: f.nodes[id].agent })
+    const createWork = (pregunta: string, corpus: string, referencia: string) =>
+      sessionWork({ action: "create", pregunta, criterios: ["CA-1"], corpus, referencia,
+        responsable_session_id: "other" }, actor("plan"), f.opts) as Promise<any>
+    const workA = (await createWork("Encargo A", "corpus-a", "ref-a")).encargo
+    const workB = (await createWork("Encargo B", "corpus-b", "ref-b")).encargo
+    const pub = (operationID: string, files: Record<string, string>, workID?: string) =>
+      publishSession({ sessionID: "other", agent: "refinador", topic: "multiencargo", operationID,
+        publicationType: "publish_agent_deliverable", files, workID }, f.opts)
+    const a1 = await pub("multi-a1", { "nota-a.md": "Contenido A1" }, workA.id)
+    const b1 = await pub("multi-b1", { "nota-b.md": "Contenido B1" }, workB.id)
+    const a2 = await pub("multi-a2", { "nota-a2.md": "Contenido A2" }, workA.id)
+    const libre = await pub("multi-legacy", { "nota-libre.md": "Llamador literal" })
+    for (const result of [a1, b1, a2, libre]) assert.equal(result.guardado, true)
+    for (const [work, delivery] of [[workA, a1], [workB, b1]] as const)
+      await sessionWork({ action: "review", encargo_id: work.id, artefacto_id: delivery.artefacto_id,
+        revisor_session_id: "revOther" }, actor("other"), f.opts)
+    const favorable = await publishReview({ sessionID: "revOther", operationID: "multi-rev-a1",
+      delivery: a1.rutas["nota-a.md"], sanity: "Aprobación completa de A1", verdict: verdictFor(a1) }, f.opts)
+    const narrativa = await publishReview({ sessionID: "revOther", operationID: "multi-rev-b1",
+      delivery: b1.rutas["nota-b.md"], sanity: "Informe narrativo de B1" }, f.opts)
+    assert.ok(favorable.guardado && narrativa.guardado)
+    const state = await f.state()
+    const records = Object.values<any>(state.versions)
+    assert.equal(records.length, 3, "un registro por cada encargo y otro para las publicaciones sin encargo")
+    const byEncargo = new Map(records.map((record: any) => [record.workID ?? "", record]))
+    const recordA = byEncargo.get(workA.id)!, recordB = byEncargo.get(workB.id)!, recordLegacy = byEncargo.get("")!
+    assert.equal(recordA.published, a2.artefacto_id)
+    assert.equal(recordA.reviewed, a1.artefacto_id)
+    assert.equal(recordA.approved, a1.artefacto_id)
+    assert.equal(recordB.published, b1.artefacto_id)
+    assert.equal(recordB.reviewed, b1.artefacto_id)
+    assert.equal(recordB.approved, undefined, "la revisión narrativa de B1 no infiere aprobación estructurada")
+    assert.equal(recordLegacy.published, libre.artefacto_id)
+    assert.equal(recordLegacy.reviewed, undefined)
+    assert.equal(recordLegacy.approved, undefined)
+    assert.equal(new Set(Object.keys(state.versions)).size, 3, "claves de registro distintas por encargo")
+    assert.equal(state.artifacts[a2.artefacto_id].previous, a1.artefacto_id)
+    assert.equal(state.artifacts[b1.artefacto_id].previous, undefined)
+    assert.equal(state.artifacts[libre.artefacto_id].previous, undefined, "el puntero legacy no adopta artefactos de un encargo")
+    const inventory = (work: any, corpus: string, referencia: string) =>
+      sessionArtifacts({ action: "list", encargo_id: work.id, corpus, referencia } as never, actor("other"), f.opts) as Promise<any>
+    const idsA = (await inventory(workA, "corpus-a", "ref-a")).artefactos.map((a: any) => a.id)
+    const idsB = (await inventory(workB, "corpus-b", "ref-b")).artefactos.map((a: any) => a.id)
+    assert.deepEqual([...idsA].sort(), [a1.artefacto_id, a2.artefacto_id, favorable.artefacto_id].sort(), "inventario del encargo A intacto")
+    assert.deepEqual([...idsB].sort(), [b1.artefacto_id, narrativa.artefacto_id].sort(), "inventario del encargo B intacto")
+    const index = await readFile(join(a1.sesion, "indice.md"), "utf8")
+    assert.match(index, new RegExp(`- other / encargo ${workA.id} / publish_agent_deliverable: última publicada \`${a2.artefacto_id}\`; última revisada \`${a1.artefacto_id}\`; última aprobada completa \`${a1.artefacto_id}\`\\.`))
+    assert.match(index, new RegExp(`- other / encargo ${workB.id} / publish_agent_deliverable: última publicada \`${b1.artefacto_id}\`; última revisada \`${b1.artefacto_id}\`; última aprobada completa \`ninguna\`\\.`))
+    assert.match(index, new RegExp(`- other / publish_agent_deliverable: última publicada \`${libre.artefacto_id}\`; última revisada \`ninguna\`; última aprobada completa \`ninguna\`\\.`))
+    for (const match of index.matchAll(/\]\(\.\/([^)]*)\)/g)) assert.ok(await stat(join(a1.sesion, decodeURI(match[1]))), match[1])
   } finally { await rm(f.dir, { recursive: true, force: true }) }
 })
 

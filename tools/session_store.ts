@@ -33,7 +33,7 @@ export type Verdict = { artefacto_id: string; hash_manifiesto: string; resultado
   alcance: string[]; aprobados: string[]; pendientes: string[]; bloqueados: string[] }
 type Review = { artifactID: string; manifestHash: string; reviewerSessionID: string; reportArtifactID: string;
   reports: string[]; verdict: Verdict }
-type Version = { producerSessionID: string; type: string; published: string; reviewed?: string; approved?: string }
+type Version = { producerSessionID: string; type: string; published: string; reviewed?: string; approved?: string; workID?: string }
 export type Artifact = {
   id: string; rootSessionID: string; producerSessionID: string; agent: string; type: string;
   files: ManifestFile[]; manifestHash: string; deliveries: string[]; directory?: string;
@@ -334,16 +334,26 @@ function checkedVerdict(value: Verdict): Verdict {
     alcance: value.alcance, aprobados: value.aprobados, pendientes: value.pendientes, bloqueados: value.bloqueados }
 }
 
+// D04: última publicada/revisada/aprobada are pointers per producer AND encargo. Two encargos of the
+// same producer session keep independent records; a legacy artifact without an encargo keeps its own
+// session/type record, so it never mixes with — or migrates into — a work-scoped record.
+function versionKey(artifact: Artifact) {
+  return hash(JSON.stringify(artifact.workID
+    ? [artifact.producerSessionID, artifact.type, artifact.workID]
+    : [artifact.producerSessionID, artifact.type]))
+}
+
 function versionRecords(state: State) {
   const versions: Record<string, Version> = {}
   for (const artifact of Object.values(state.artifacts)) {
     if (artifact.agent !== "revisor") {
-      const key = hash(JSON.stringify([artifact.producerSessionID, artifact.type]))
-      versions[key] = { ...versions[key], producerSessionID: artifact.producerSessionID, type: artifact.type, published: artifact.id }
+      const key = versionKey(artifact)
+      versions[key] = { ...versions[key], producerSessionID: artifact.producerSessionID, type: artifact.type,
+        published: artifact.id, ...(artifact.workID ? { workID: artifact.workID } : {}) }
     } else {
       const target = Object.values(state.artifacts).find(a => a.deliveries.includes(artifact.origin.delivery ?? ""))
       if (!target) continue // Narrative legacy reviews do not invent an artifact identity.
-      const key = hash(JSON.stringify([target.producerSessionID, target.type]))
+      const key = versionKey(target)
       versions[key].reviewed = target.id
       if (state.reviews[artifact.id]?.verdict.resultado === "favorable") versions[key].approved = target.id
     }
@@ -375,7 +385,7 @@ async function projectIndex(state: State, sessionDir: string, stateDir: string, 
     }
   }
   const versions = Object.values(versionRecords(state)).flatMap(version => [
-    `- ${version.producerSessionID} / ${version.type}: última publicada \`${version.published}\`; última revisada \`${version.reviewed ?? "ninguna"}\`; última aprobada completa \`${version.approved ?? "ninguna"}\`.`,
+    `- ${version.producerSessionID}${version.workID ? ` / encargo ${version.workID}` : ""} / ${version.type}: última publicada \`${version.published}\`; última revisada \`${version.reviewed ?? "ninguna"}\`; última aprobada completa \`${version.approved ?? "ninguna"}\`.`,
   ])
   const details = Object.values(state.artifacts).filter(a => a.agent !== "revisor").flatMap(artifact => {
     const reports = Object.values(state.artifacts).filter(a => artifact.deliveries.includes(a.origin.delivery ?? ""))
