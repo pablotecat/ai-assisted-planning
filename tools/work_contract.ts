@@ -48,16 +48,23 @@ export const workRequest = tool.schema.discriminatedUnion("action", [
 export type WorkRequest = ReturnType<typeof workRequest.parse>
 
 export const artifactFields = {
-  action: tool.schema.enum(["list", "read"]), encargo_id: text, corpus: text, referencia: text,
+  action: tool.schema.enum(["list", "read", "share"]), encargo_id: text, corpus: text, referencia: text,
   artefacto_id: text.optional(), archivo: text.optional(), cursor: text.optional(),
   limite: tool.schema.number().int().min(1).max(16000).optional(),
   vista: tool.schema.enum(["linea"]).optional().describe("Vista derivada estable por líneas del original intacto; solo formatos conocidos, un envoltorio desconocido produce diagnóstico"),
   localizador: text.optional().describe("Localizador de fragmento L<número de línea 1-based> del original registrado; exclusivo con cursor"),
+  origen_encargo_id: text.optional().describe("Encargo que posee la instantánea; solo para share"),
+  instantanea_id: text.optional().describe("Instantánea a compartir con el encargo indicado; solo para share"),
 }
 const artifacts = tool.schema.object(artifactFields)
+// share is the minimum explicit link to reuse a snapshot from another encargo of
+// the same corpus/referencia; it never widens the per-role audience (D05).
 export const artifactRequest = tool.schema.discriminatedUnion("action", [
-  artifacts.omit({ archivo: true, artefacto_id: true, vista: true, localizador: true })
+  artifacts.omit({ archivo: true, artefacto_id: true, vista: true, localizador: true, origen_encargo_id: true, instantanea_id: true })
     .extend({ action: tool.schema.literal("list") }).strict(),
-  artifacts.extend({ action: tool.schema.literal("read"), artefacto_id: text, archivo: text }).strict(),
+  artifacts.omit({ origen_encargo_id: true, instantanea_id: true })
+    .extend({ action: tool.schema.literal("read"), artefacto_id: text, archivo: text }).strict(),
+  artifacts.pick({ action: true, encargo_id: true, corpus: true, referencia: true })
+    .extend({ action: tool.schema.literal("share"), origen_encargo_id: text, instantanea_id: text }).strict(),
 ])
 export type ArtifactRequest = ReturnType<typeof artifactRequest.parse>

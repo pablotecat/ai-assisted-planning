@@ -60,6 +60,9 @@ export type Snapshot = {
   contentSha256: string; bytes: number; representacion: "texto_literal" | "objeto_serializado"; formato: string; created: number
   version?: { tipo: "hash" | "fecha" | "referencia" | "otro"; valor: string }
   cobertura_paginas?: SourceCoveragePages; cobertura_campos?: SourceCoverageFields; pendientes?: string[]
+  // 8.4 minimum explicit link: workIDs authorized to read a snapshot produced by
+  // another encargo. Established only by whoever manages both encargos (share).
+  compartida_con?: string[]
 }
 type WorkEvent = { sessionID: string; messageID?: string; action: string; responsibleSessionID?: string;
   suficiencia?: "parcial" | "completo";
@@ -981,19 +984,23 @@ function snapshotResult(snapshot: Snapshot, state: State) {
 }
 
 // D05 for snapshots: access derives from the verified tree and assignment, not
-// from knowing an ID, a hash or a blob path.
+// from knowing an ID, a hash or a blob path. A shared snapshot keeps the same
+// per-role matrix: the producer must belong to the snapshot's own encargo, so
+// raw reader sources never reach an investigator through a shared link.
 async function canReadSource(snapshot: Snapshot, work: Work, nodes: Identity[], state: State, options: Options) {
-  if (snapshot.workID !== work.id || snapshot.rootSessionID !== nodes[0].id) return false
+  const shared = snapshot.compartida_con?.includes(work.id) ?? false
+  if (snapshot.workID !== work.id && !shared) return false
+  if (snapshot.rootSessionID !== nodes[0].id) return false
   const actor = nodes.at(-1)!
   const producer = await workIdentity(snapshot.producerSessionID, nodes, options)
   if (producer.agent !== snapshot.agent) throw new Error("Productor de la fuente distinto del registro")
   if (actor.agent === "revisor") return work.reviews.some(review => review.sessionID === actor.id)
   if (actor.id !== work.responsibleSessionID && !manages(work, actor.id, state) && actor.id !== producer.id) return false
-  // H-1: captureSource authorizes the encargo owner too, but Work.assignments only
-  // holds the responsible session and substitutes — never the owner when
-  // owner ≠ responsable. The owner is part of the encargo's authority (manages),
-  // so a snapshot produced by the owner is readable like one by the responsible.
-  if (!work.assignments.includes(producer.id) && producer.id !== work.ownerSessionID) return false
+  const originWork = shared ? state.work[snapshot.workID] : work
+  if (!originWork) return false
+  // H-1: the owner is part of the encargo's authority (manages), so a snapshot
+  // produced by the owner counts like one by the responsible.
+  if (!originWork.assignments.includes(producer.id) && producer.id !== originWork.ownerSessionID) return false
   // Raw sources captured by a reader keep their narrow audience: an investigator
   // does not acquire raw code/local-document access through a caller-supplied label.
   if (actor.agent === "investigador" && !["investigador", "refinador", "planificador", "arquitecto"].includes(producer.agent)) return false
@@ -1157,9 +1164,44 @@ function sourceView(meta: {
 export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, options: Options): Promise<unknown> {
   const input = artifactRequest.parse(raw)
   const nodes = await chain(actor.sessionID, actor.messageID, options.get)
-  if (nodes.at(-1)!.agent !== actor.agent) throw new Error("Lector del artefacto diferente")
+  const current = nodes.at(-1)!
+  if (current.agent !== actor.agent) throw new Error("Lector del artefacto diferente")
   const settings = await readAgentSettings(options.settingsPath)
-  checkReader(nodes.at(-1)!, nodes, settings.agentes.investigador.especialistasPermitidos)
+  checkReader(current, nodes, settings.agentes.investigador.especialistasPermitidos)
+  // 8.4 share: the only write path of this tool, an explicit encargo-to-encargo
+  // link. It requires managing both encargos, a matching corpus/referencia and an
+  // intact blob; with saving off it returns exactly {guardado:false}.
+  if (input.action === "share") {
+    if (current.agent === "revisor") throw new Error("El Revisor consulta instantáneas; no comparte fuentes")
+    if (!settings.agentes[agentNames[current.agent]].guardarEntregablesEnSesion) return { guardado: false }
+    const { root, stateDir } = await stateLocation(nodes, options, true)
+    return locked(join(stateDir, ".lock"), async () => {
+      const state = await loadOrCreateState(root, stateDir, nodes[0], "encargo")
+      const work = await authorizedWork(state, input.encargo_id, nodes, options)
+      if (input.corpus !== work.corpus || input.referencia !== work.referencia)
+        throw new Error("Corpus/referencia del encargo distintos")
+      const originWork = await authorizedWork(state, input.origen_encargo_id, nodes, options)
+      if (!(manages(work, current.id, state) && manages(originWork, current.id, state)))
+        throw new Error("Solo quien gestiona ambos encargos comparte una instantánea")
+      const snapshot = state.snapshots[input.instantanea_id]
+      if (!snapshot || snapshot.workID !== originWork.id || snapshot.rootSessionID !== nodes[0].id)
+        throw new Error("Instantánea ajena al encargo de origen o no registrada")
+      if (snapshot.workID === work.id) throw new Error("La instantánea ya pertenece al encargo indicado")
+      if (snapshot.corpus !== work.corpus || snapshot.referencia !== work.referencia)
+        throw new Error("Corpus/referencia de la instantánea incompatibles con el encargo destino")
+      // The blob is re-verified before the link is recorded: a link never shares
+      // an original that no longer matches its hash.
+      await sourceBlob(stateDir, snapshot)
+      const already = snapshot.compartida_con?.includes(work.id) ?? false
+      if (!already) {
+        snapshot.compartida_con = [...(snapshot.compartida_con ?? []), work.id]
+        await saveJson(join(stateDir, "state.json"), state)
+      }
+      return { guardado: true, instantanea_id: snapshot.id, encargo_id: work.id, origen_encargo_id: snapshot.workID,
+        fuente: snapshot.fuente, ...(already ? { ya_compartida: true } : {}),
+        contenido: { sha256: snapshot.contentSha256, bytes: snapshot.bytes } }
+    })
+  }
   const { root, stateDir } = await stateLocation(nodes, options, false)
   const state = await loadState(stateDir, false)
   const work = await authorizedWork(state, input.encargo_id, nodes, options)
@@ -1169,17 +1211,44 @@ export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, optio
   for (const artifact of Object.values(state.artifacts))
     if (artifact.workID === work.id && await canReadArtifact(artifact, work, nodes, state, options)) accessible.push(artifact)
   accessible.sort((a, b) => a.id.localeCompare(b.id))
+  // 8.4 bounded snapshot inventory: only this encargo's own and explicitly shared
+  // snapshots, drawn by canReadSource — no global catalog, no arbitrary paths.
+  const readable: Snapshot[] = []
+  for (const snapshot of Object.values(state.snapshots))
+    if (await canReadSource(snapshot, work, nodes, state, options)) readable.push(snapshot)
+  readable.sort((a, b) => a.id.localeCompare(b.id))
   if (input.action === "list") {
     const limit = input.limite ?? 20
     if (limit > 100) throw new Error("Inventario: limite máximo 100")
-    const binding = hash(JSON.stringify([actor.sessionID, work.id, "list", accessible.map(a => [a.id, a.manifestHash])]))
-    const offset = pageOffset(input.cursor, binding, accessible.length)
+    const binding = hash(JSON.stringify([actor.sessionID, work.id, "list",
+      accessible.map(a => [a.id, a.manifestHash]), readable.map(s => [s.id, s.contentSha256])]))
+    const total = Math.max(accessible.length, readable.length)
+    const offset = pageOffset(input.cursor, binding, total)
     const page = accessible.slice(offset, offset + limit)
+    const snapPage = readable.slice(offset, offset + limit)
     for (const artifact of page) await verifyArtifact(sessionDir, artifact, state)
+    for (const snapshot of snapPage) await sourceBlob(stateDir!, snapshot)
+    const consumed = offset + Math.max(page.length, snapPage.length)
     return { artefactos: page.map(artifact => {
       const operation = Object.values(state.operations).find(op => op.phase === "confirmed" && op.artifact.id === artifact.id)!
       return { ...artifact, operacion_id: operation.logicalID, fuentes: operation.sources, decisiones: operation.decisions, claves: operation.keys }
-    }), cursor: nextCursor(binding, offset + page.length, accessible.length) }
+    }),
+    // Coverage/version/pending are the producer's declarations; the content hash
+    // is the runtime's verified receipt. Vigencia is not decided by date equality.
+    instantaneas: snapPage.map(snapshot => ({
+      id: snapshot.id, operacion_id: snapshot.operacion_id, fuente: snapshot.fuente, corpus: snapshot.corpus,
+      referencia: snapshot.referencia, archivo: snapshot.archivo,
+      productor: { sesion: snapshot.producerSessionID, agente: snapshot.agent,
+        ...(snapshot.producerMessageID ? { mensaje: snapshot.producerMessageID } : {}) },
+      representacion: snapshot.representacion, formato: snapshot.formato,
+      contenido: { sha256: snapshot.contentSha256, bytes: snapshot.bytes },
+      ...(snapshot.version ? { version: snapshot.version } : {}),
+      ...(snapshot.cobertura_paginas ? { cobertura_paginas: snapshot.cobertura_paginas } : {}),
+      ...(snapshot.cobertura_campos ? { cobertura_campos: snapshot.cobertura_campos } : {}),
+      ...(snapshot.pendientes ? { pendientes: snapshot.pendientes } : {}),
+      ...(snapshot.compartida_con?.length ? { compartida_con: snapshot.compartida_con } : {}),
+      creado: snapshot.created,
+    })), cursor: nextCursor(binding, consumed, total) }
   }
   const readResult = async (id: string, archivo: string, meta: {
     sha256: string; text: string; instantanea: boolean; extra?: Record<string, unknown> }) => {
@@ -1218,7 +1287,10 @@ export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, optio
     return readResult(input.artefacto_id, snapshot.archivo, { sha256: snapshot.contentSha256, text, instantanea: true,
       extra: { fuente: snapshot.fuente, corpus: snapshot.corpus, referencia: snapshot.referencia,
         representacion: snapshot.representacion, formato: snapshot.formato,
-        ...(snapshot.version ? { version: snapshot.version } : {}) } })
+        ...(snapshot.version ? { version: snapshot.version } : {}),
+        ...(snapshot.cobertura_paginas ? { cobertura_paginas: snapshot.cobertura_paginas } : {}),
+        ...(snapshot.cobertura_campos ? { cobertura_campos: snapshot.cobertura_campos } : {}),
+        ...(snapshot.pendientes ? { pendientes: snapshot.pendientes } : {}) } })
   }
   const file = artifact.files.find(f => f.path === input.archivo)
   if (!file) throw new Error("Artefacto/archivo no asignado o no registrado")
