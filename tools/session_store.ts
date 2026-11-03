@@ -989,7 +989,11 @@ async function canReadSource(snapshot: Snapshot, work: Work, nodes: Identity[], 
   if (producer.agent !== snapshot.agent) throw new Error("Productor de la fuente distinto del registro")
   if (actor.agent === "revisor") return work.reviews.some(review => review.sessionID === actor.id)
   if (actor.id !== work.responsibleSessionID && !manages(work, actor.id, state) && actor.id !== producer.id) return false
-  if (!work.assignments.includes(producer.id)) return false
+  // H-1: captureSource authorizes the encargo owner too, but Work.assignments only
+  // holds the responsible session and substitutes — never the owner when
+  // owner ≠ responsable. The owner is part of the encargo's authority (manages),
+  // so a snapshot produced by the owner is readable like one by the responsible.
+  if (!work.assignments.includes(producer.id) && producer.id !== work.ownerSessionID) return false
   // Raw sources captured by a reader keep their narrow audience: an investigator
   // does not acquire raw code/local-document access through a caller-supplied label.
   if (actor.agent === "investigador" && !["investigador", "refinador", "planificador", "arquitecto"].includes(producer.agent)) return false

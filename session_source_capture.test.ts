@@ -336,6 +336,39 @@ test("S08 matriz D05 de instantáneas: audiencia por árbol/corpus, lector crudo
     /no asignado o no registrado/)
 })
 
+test("S08 H-1: el coordinador propietario (owner ≠ responsable) captura y después lee su propia instantánea; coordinador ajeno no", async t => {
+  const f = await fixture(t)
+  // r owns the encargo, i is the responsible: owner ≠ responsable.
+  const w = await f.create("r", { responsable_session_id: "i" })
+  assert.notEqual(w.ownerSessionID, w.responsibleSessionID)
+  // The owner is authorized to capture (captureSource), and the snapshot must
+  // be readable afterwards: the exact gap was "guardado:true" then nobody reads.
+  const captured = await f.capture("r", { encargo_id: w.id, corpus: "corpus-autorizado",
+    referencia: "ref-v1", fuente: "APP-7", operacion_id: "cap-owner",
+    resultado: "Original capturado por el propietario" })
+  assert.equal(captured.guardado, true)
+  assert.match(captured.instantanea_id, /^snap-/)
+  const read = (id: string, extra: object = {}) => f.artifacts(id, w.id, { artefacto_id: captured.instantanea_id,
+    archivo: captured.archivo, ...extra })
+  const own = await read("r")
+  assert.ok(own.instantanea, "El propietario lee la instantánea que él mismo capturó")
+  assert.equal(own.contenido, "Original capturado por el propietario")
+  assert.equal(own.fuente, "APP-7")
+  assert.equal(own.corpus, "corpus-autorizado")
+  assert.equal(own.referencia, "ref-v1")
+  // The responsible of the same encargo also reads it (authority chain), raw and derived.
+  const raw = await read("i")
+  assert.equal(raw.contenido, "Original capturado por el propietario")
+  const view = await read("i", { vista: "linea" })
+  assert.deepEqual(view.lineas, [{ numero: 1, contenido: "Original capturado por el propietario" }])
+  // Negatives kept: another coordinator outside the encargo, an unassigned reader
+  // and a corpus mismatch stay rejected; the Revisor path is unchanged (H-5 scope).
+  await assert.rejects(read("sibling"), /no asignado/)
+  await assert.rejects(read("docs"), /no asignado/)
+  await assert.rejects(read("otherReview"), /no asignado/)
+  await assert.rejects(read("r", { corpus: "otro" }), /Corpus/)
+})
+
 //// Real private server: native Code Mode transfer, no real model. ////
 
 test("S08 motor privado: Code Mode transfiere la lectura directamente a capture sin retranscripción; blob, código y lectura verificados", { timeout: 300_000 }, async t => {
