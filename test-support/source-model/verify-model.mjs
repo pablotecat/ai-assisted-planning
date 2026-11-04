@@ -38,6 +38,10 @@ export function consentS08(env) {
   return { flow, window }
 }
 
+// runBounded may spend up to 5 s terminating its private Windows process tree.
+// Reserve that cleanup plus 1 s of final evidence inside the authorized window.
+export const supervisedWindow = window => window - 6000
+
 // The model under trial stays a declared parameter, never executed by this
 // file or its tests. Only the authorized CLI invocation may run the trial.
 export function resolveTrialModel(env) {
@@ -217,9 +221,13 @@ export function verifyCoverageGroup(snapshots, transfers) {
   const covered = new Set()
   for (const transfer of transfers) {
     const snapshot = snapshots.find(s => s.id === transfer.snapshotID)
-    if (!snapshot || snapshot.version?.tipo !== "referencia" || snapshot.version.valor !== reference || snapshot.pendientes?.length) continue
+    const version = snapshot?.version
+    const compatible = !version || version.tipo === "referencia" && version.valor === reference ||
+      version.tipo === "hash" && version.valor === snapshot.contentSha256
+    if (!snapshot || snapshot.referencia !== reference || !compatible || snapshot.pendientes?.length) continue
+    const fields = new Set(snapshot.cobertura_campos?.recuperados.map(field => field.replace(/^fields\./, "")) ?? [])
     if (transfer.component === "issue" && ["summary", "description", "customFields"].every(field =>
-      snapshot.cobertura_campos?.recuperados.includes(field)) && !snapshot.cobertura_campos?.pendientes.length) covered.add("issue")
+      fields.has(field)) && !snapshot.cobertura_campos?.pendientes.length) covered.add("issue")
     const page = transfer.component === "comments:0" ? 1 : transfer.component === "comments:2" ? 2 : null
     if (page && snapshot.cobertura_paginas?.recuperadas.includes(page) && snapshot.cobertura_paginas.total === 2)
       covered.add(transfer.component)
@@ -376,17 +384,23 @@ export async function verifyReviewIfExists({ states, sessions, snapshots, blobOf
     // reads of a snapshot captured by the delivery producer.
     const producerShas = new Set(snapshots.filter(snapshot => snapshot.producerSessionID === delivery.producerSessionID && snapshot.workID === delivery.workID)
       .map(snapshot => snapshot.contentSha256))
-    const readShas = new Set()
+    const readShas = new Set(), readComponents = new Set()
     for (const snapshot of snapshots) {
       if (!producerShas.has(snapshot.contentSha256)) continue
       const bytes = await blobOf(snapshot.contentSha256)
       assert.equal(hash(bytes), snapshot.contentSha256)
-      if (verifyArtifactReads([readingReviewer], snapshot, bytes.toString("utf8")).lecturasCompletas) readShas.add(snapshot.contentSha256)
+      if (verifyArtifactReads([readingReviewer], snapshot, bytes.toString("utf8")).lecturasCompletas) {
+        readShas.add(snapshot.contentSha256)
+        for (const [component, content] of Object.entries(sourceComponents))
+          if (stableJson(JSON.parse(bytes.toString("utf8"))) === stableJson(JSON.parse(content))) readComponents.add(component)
+      }
     }
     assert.ok(readShas.size > 0, "El revisor debe leer realmente la fuente; no hereda la lectura del productor")
     assert.ok([...readShas].some(sha => producerShas.has(sha)),
       "El revisor debe cotejar la misma versión de la fuente que utilizó la entrega")
     if (record?.verdict) {
+      assert.ok(Object.keys(sourceComponents).every(component => readComponents.has(component)),
+        "El Revisor debe leer todos los componentes y páginas del original antes del dictamen")
       assert.ok(["favorable", "parcial", "con_hallazgos"].includes(record.verdict.resultado), "Resultado de dictamen válido")
       const operation = states.flatMap(s => Object.values(s.operations ?? {})).find(op => op.phase === "confirmed" && op.artifact.id === report?.id)
       assert.ok(operation, "Informe del Revisor confirmado requerido")
@@ -561,8 +575,9 @@ export async function runTrial({ root, host, request, writer, summary, flow }) {
     const turn2Final = { message: verifyTurn(messages, admission2, promptTurn2) }
     // Mechanical trials, all recorded (never approving by word/hash matches).
     const reuse = verifyReuse({ calls, prompt2At })
+    const capturedIDs = new Set(receipts.map(receipt => parseJson(resultText(receipt.result))?.instantanea_id))
     const snapshots = states.flatMap(state => Object.values(state.snapshots ?? {}))
-      .filter(snapshot => snapshot.fuente === fuente)
+      .filter(snapshot => capturedIDs.has(snapshot.id) && snapshot.corpus === site.cloudId && snapshot.referencia === reference)
     assert.ok(snapshots.length, "Instantánea de la fuente requerida")
     const transfer = await verifyTransfer({ snapshots, recoveries: reuse.turn1.concat(reuse.turn2), receipts, sessions, blobOf: blobReader(host) })
     for (const input of [...inputs.values()]) if (input.name === "execute")
@@ -689,7 +704,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     console.log(`Evidence: ${root}`)
     try {
       await runBounded(process.execPath, [fileURLToPath(import.meta.url), "--worker", root],
-        { cwd: source, timeout: budgets.window, env: { ...process.env, OPENCODE_EVIDENCE_MODEL: `${trialModel.providerID}/${trialModel.id}` } })
+        { cwd: source, timeout: supervisedWindow(budgets.window), env: { ...process.env, OPENCODE_EVIDENCE_MODEL: `${trialModel.providerID}/${trialModel.id}` } })
     } catch (error) { await recordSupervisionFailure(root, error); throw error }
   }
 }

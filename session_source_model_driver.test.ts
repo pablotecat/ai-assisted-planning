@@ -9,13 +9,13 @@ import { accreditedSourceUse, assertNoRetranscription, blobReader, consentS08, e
   loadSourceCalls, observedRecoveries, prepareTrial, recordSupervisionFailure, resolveTrialModel,
   reviewChecklistS08, runTrial, sessionArtifactOutputs, verifyArtifactReads, verifyCoverage,
   verifyReuse, verifyReviewIfExists as verifyReviewRaw, verifyTransfer as verifyTransferRaw, verifyTurn, verifyCoverageGroup,
-  verifyVersionDifferences } from "./test-support/source-model/verify-model.mjs"
+  verifyVersionDifferences, supervisedWindow } from "./test-support/source-model/verify-model.mjs"
 import { evidenceWriter, hash } from "./test-support/evidence-model/verify-model.mjs"
 import { privateRequest, runBounded } from "./test-support/delegation/verify-model.mjs"
 import { withServer } from "./test-support/opencode.mjs"
 import { cancellationRule, contradictionProbe, fuente, guaranteePending, issue, longHtml, promptTurn1,
   promptTurn2, refundRule, reference, requiredCoverage, site, sourceContent, sourceObjectContent,
-  sourceSha256, stableStringify, commentContents } from "./test-support/source-model/data.mjs"
+  sourceSha256, stableStringify, commentContents, issueRead } from "./test-support/source-model/data.mjs"
 
 const temp = join(process.env.LOCALAPPDATA!, "Temp/opencode")
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex")
@@ -42,6 +42,7 @@ test("S08 guard: opt-in específico y presupuestos máximos 360000/600000 antes 
   }
   assert.deepEqual(consentS08({ ...env, OPENCODE_SOURCE_MODEL_CONSENT: "s08-behavior", OPENCODE_SOURCE_FLOW_MS: "360000", OPENCODE_SOURCE_WINDOW_MS: "600000" }),
     { flow: 360000, window: 600000 })
+  assert.equal(supervisedWindow(600_000) + 5000 + 1000, 600_000, "El límite total incluye terminación y evidencia final")
   assert.throws(() => consentS08({ ...env, OPENCODE_SOURCE_MODEL_CONSENT: "s08-behavior", OPENCODE_SOURCE_WINDOW_MS: "600001" }), /window budget/)
   assert.throws(() => consentS08({ ...env, OPENCODE_SOURCE_MODEL_CONSENT: "s08-behavior", OPENCODE_SOURCE_WINDOW_MS: "31000" }), /window budget/)
 })
@@ -68,13 +69,15 @@ test("S08 modelo: parámetro validado, plainconcepts/glm-5-3 por defecto, nunca 
 test("S08 caso: original sintético fijo, HTML >2000 en una línea, cobertura exigida y prompts sin órdenes", () => {
   assert.ok(longHtml.length > 2000 && !longHtml.includes("\n") && longHtml.includes("<table"))
   assert.equal(sourceContent, JSON.stringify(JSON.parse(sourceContent)), "Forma literal canónica del original")
-  assert.deepEqual(JSON.parse(sourceContent), issue)
-  assert.equal(sourceObjectContent, stableStringify(issue))
+  assert.deepEqual(JSON.parse(sourceContent), issueRead)
+  assert.equal(sourceObjectContent, stableStringify(issueRead))
   assert.equal(sha256(sourceContent), sourceSha256)
   assert.notEqual(sourceContent, sourceObjectContent, "La serialización determinista difiere del literal en el orden de claves")
   // Answers really contained in the original; a contradiction probe is not.
   assert.ok(sourceContent.includes(cancellationRule) && sourceContent.includes(refundRule))
-  assert.ok(sourceContent.includes("el anexo de garantías no está firmado"))
+  assert.ok(!sourceContent.includes("el anexo de garantías no está firmado"), "El issue no entrega comentarios ocultando la paginación")
+  assert.ok(commentContents[1].includes("el anexo de garantías no está firmado"))
+  assert.deepEqual(JSON.parse(commentContents[0]).comments.concat(JSON.parse(commentContents[1]).comments), issue.fields.comment.comments)
   assert.ok(!sourceContent.includes(contradictionProbe))
   assert.deepEqual(requiredCoverage, { paginas: { recuperadas: [1, 2], pendientes: [], total: 2 },
     campos: { recuperados: ["summary", "description", "customFields", "comment"], pendientes: [] } })
@@ -138,7 +141,7 @@ function transferEvidence(snapshots: any[]) {
   return { receipts: snapshots.map(s => ({ sessionID: s.producerSessionID, messageID: s.producerMessageID,
     callID: "call-1", time: 3, input: { encargo_id: s.workID, operacion_id: s.operacion_id, fuente: s.fuente,
       corpus: s.corpus, referencia: s.referencia, version: s.version, paginas: s.cobertura_paginas, campos: s.cobertura_campos,
-      resultado: s.contentSha256 === hash(sourceObjectContent) ? issue : sourceContent },
+      resultado: s.contentSha256 === hash(sourceObjectContent) ? issueRead : sourceContent },
     result: { content: JSON.stringify({ instantanea_id: s.id, contenido: { sha256: s.contentSha256, bytes: s.bytes } }) } })),
     sessions: [{ id: "ses_root", messages: [{ id: "msg_exec", type: "assistant", content: [{ type: "tool", id: "call-1",
       name: "execute", state: { status: "completed", input: { code: "const original = await tools.jira.getJiraIssue({}); return tools.sesion.capture_agent_source({resultado:original})" } } }] }] }] }
@@ -364,18 +367,28 @@ test("S08 revisión nativa: fuente y entrega completas antes del dictamen; bytes
     operations: { delivery: { phase: "confirmed", artifact: delivery, result: { sesion: root } },
       report: { phase: "confirmed", artifact: report, result: output } },
     reviews: { report: { artifactID: delivery.id, reviewerSessionID: "ses_revisor", reportArtifactID: report.id, verdict } } }]
-  const sourceReads: any = reviewerSessions()[0]
+  const sourceSnapshots = [...producerSnapshots(), ...commentContents.map((text, n) => snapshotFixture({
+    id: `snap-page-${n}`, producerSessionID: "ses_prod", contentSha256: hash(text), bytes: Buffer.byteLength(text) }))]
+  const sourceReads: any = sessionsWithToolParts(sourceSnapshots.map((snapshot, n) => ({
+    ...readOutputPages(n ? commentContents[n - 1] : sourceContent, 0), artefacto_id: snapshot.id,
+    contenido: n ? commentContents[n - 1] : sourceContent, fin: n ? commentContents[n - 1].length : sourceContent.length,
+    cursor: null })), "ses_revisor")[0]
+  sourceReads.agent = "revisor"; sourceReads.parentID = "ses_prod"
   const deliveryReads: any = sessionsWithToolParts([{ artefacto_id: delivery.id, archivo: "delivery.md", sha256: hash(deliveryText),
     contenido: deliveryText, inicio: 0, fin: deliveryText.length, total: deliveryText.length, cursor: null }], "ses_revisor")[0]
   const publication: any = { id: "msg-publish", type: "assistant", content: [{ type: "tool", name: "write_review_documents",
     state: { status: "completed", input: { entrega: join(root, "delivery.md"), sanidad: reportText, dictamen: verdict },
       content: [{ type: "text", text: JSON.stringify(output) }] } }] }
   const sessions = [{ ...sourceReads, messages: [sourceReads.messages[0], deliveryReads.messages[0], publication] }]
-  assert.equal((await verifyReviewIfExists({ states, sessions, snapshots: producerSnapshots() })).reviews[0].verdict.resultado, "favorable")
+  const blobOf = async (sha: string) => Buffer.from(commentContents.find(text => hash(text) === sha) ?? sourceContent)
+  assert.equal((await verifyReviewIfExists({ states, sessions, snapshots: sourceSnapshots, blobOf })).reviews[0].verdict.resultado, "favorable")
+  const partial = structuredClone(sessions)
+  partial[0].messages[0].content.pop()
+  await assert.rejects(verifyReviewIfExists({ states, sessions: partial, snapshots: sourceSnapshots, blobOf }), /todos los componentes/)
   const late = [{ ...sessions[0], messages: [publication, sourceReads.messages[0], deliveryReads.messages[0]] }]
-  await assert.rejects(verifyReviewIfExists({ states, sessions: late, snapshots: producerSnapshots() }), /leer realmente/)
+  await assert.rejects(verifyReviewIfExists({ states, sessions: late, snapshots: sourceSnapshots, blobOf }), /leer realmente/)
   await writeFile(join(root, reportFiles[0].path), "informe adulterado")
-  await assert.rejects(verifyReviewIfExists({ states, sessions, snapshots: producerSnapshots() }), /bytes changed/)
+  await assert.rejects(verifyReviewIfExists({ states, sessions, snapshots: sourceSnapshots, blobOf }), /bytes changed/)
 })
 
 test("S08 aceptación adversarial: mismo mensaje/hash no sustituye el mismo execute ni el tipo recibido", async () => {
@@ -424,6 +437,9 @@ test("S08 componentes: páginas separadas completan solo su versión; repetició
   assert.equal(verifyCoverageGroup(snapshots.slice(0, 2), transfers).completa, false)
   snapshots[2].version = { tipo: "referencia", valor: "version-distinta" }
   assert.equal(verifyCoverageGroup(snapshots, transfers).completa, false)
+  const contentHashed = snapshots.map(s => ({ ...s, version: undefined }))
+  assert.equal(verifyCoverageGroup(contentHashed, transfers).completa, true,
+    "Los componentes transferidos de la misma versión invariante conservan hash aunque no declaren version opcional")
   const calls = [0, 1].flatMap(n => [callFixture("started", { name: "getJiraIssueComments", component: "comments:0", invocationID: `read-${n}`,
     sessionID: n ? "ses_delegado" : "ses_root", time: 10 + n }), callFixture("completed", { name: "getJiraIssueComments",
     component: "comments:0", invocationID: `read-${n}`, sessionID: n ? "ses_delegado" : "ses_root", time: 20 + n,
@@ -535,6 +551,7 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
   let workID: string | undefined, literalID: string | undefined, archivo: string | undefined
   let rawPages = 0, lineViews = 0, reuseViews = 0, extraViews = 0, published = false
   let commentIDs: string[] = []
+  let commentFiles: string[] = []
   const provider = createServer(async (req, res) => {
     const chunks: Buffer[] = []
     for await (const chunk of req) chunks.push(chunk as Buffer)
@@ -554,7 +571,7 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
       pregunta: "Q-CANCELACION y Q-ABONO de APP-1", criterios: [], corpus: site.cloudId, referencia: reference })
     else if (index === 1) {
       workID = /"id"\s*:\s*"(work-[a-f0-9-]+)"/.exec(last)![1]
-      const base = `encargo_id:${JSON.stringify(workID)},corpus:${JSON.stringify(site.cloudId)},referencia:${JSON.stringify(reference)},fuente:"APP-1",version:{tipo:"referencia",valor:${JSON.stringify(reference)}},paginas:{recuperadas:[1,2],pendientes:[],total:2},campos:{recuperados:${JSON.stringify(requiredCoverage.campos.recuperados)},pendientes:[]}`
+      const base = `encargo_id:${JSON.stringify(workID)},corpus:${JSON.stringify(site.cloudId)},referencia:${JSON.stringify(reference)},fuente:"APP-1",version:{tipo:"referencia",valor:${JSON.stringify(reference)}},paginas:{recuperadas:[1,2],pendientes:[],total:2},campos:{recuperados:${JSON.stringify(requiredCoverage.campos.recuperados.map(field => "fields." + field))},pendientes:[]}`
       const code = `const issue = await tools.jira.getJiraIssue({cloudId:${JSON.stringify(site.cloudId)},issueIdOrKey:"APP-1"});
         const parse = value => typeof value === "string" ? JSON.parse(value) : value;
         const literal = await tools.sesion.capture_agent_source({${base},operacion_id:"cap-app1-literal",resultado:issue});
@@ -563,6 +580,7 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
         for (const startAt of [0,2]) {
           const page = await tools.jira.getJiraIssueComments({cloudId:${JSON.stringify(site.cloudId)},issueIdOrKey:"APP-1",startAt,maxResults:2});
           comments.push(parse(await tools.sesion.capture_agent_source({${base},operacion_id:"cap-comments-"+startAt,
+            fuente:"APP-1:comments:"+startAt,version:undefined,
             paginas:{recuperadas:[startAt/2+1],pendientes:[],total:2},resultado:page})));
         }
         return JSON.stringify({literal: parse(literal), objeto: parse(objeto), comments})`
@@ -574,13 +592,15 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
         literalID = caps.literal.instantanea_id
         archivo = caps.literal.archivo
         commentIDs = caps.comments.map((c: any) => c.instantanea_id)
+        commentFiles = caps.comments.map((c: any) => c.archivo)
       }
       const readArgs = (extra: object = {}) => ({ action: "read", encargo_id: workID, corpus: site.cloudId,
         referencia: reference, artefacto_id: literalID, archivo, limite: readLimit, ...extra })
       const cursor = /"cursor"\s*:\s*"([^"]+)"/.exec(last)?.[1]
       if (rawPages === 0 || cursor) { rawPages++; delta = tool("session_artifacts", readArgs(cursor ? { cursor } : {})) }
       else if (lineViews === 0) { lineViews++; delta = tool("session_artifacts", readArgs({ vista: "linea", limite: 500 })) }
-      else if (extraViews < 2) { delta = tool("session_artifacts", readArgs({ artefacto_id: commentIDs[extraViews++], vista: "linea" })) }
+      else if (extraViews < 2) { delta = tool("session_artifacts", readArgs({ artefacto_id: commentIDs[extraViews],
+        archivo: commentFiles[extraViews++], vista: "linea" })) }
       else if (!published) {
         published = true
         delta = tool("write_report_pair", { slug: "consulta", encargo_id: workID, operacion_id: "programmed-s08",
@@ -592,8 +612,9 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
     }
     else {
       if (reuseViews < 3 && literalID) {
+        const index = reuseViews++
         delta = tool("session_artifacts", { action: "read", encargo_id: workID, corpus: site.cloudId, referencia: reference,
-          artefacto_id: [literalID, ...commentIDs][reuseViews++], archivo, vista: "linea", limite: 500 }) }
+          artefacto_id: [literalID, ...commentIDs][index], archivo: index ? commentFiles[index - 1] : archivo, vista: "linea", limite: 500 }) }
       else { finish = "stop"; delta = { content: `PROGRAMMED. Q-GARANTIA: pendiente, ${guaranteePending}. Sin nueva recuperación de la fuente: se usa la ya disponible del encargo (${literalID}).` } }
     }
     res.writeHead(200, { "content-type": "text/event-stream" })

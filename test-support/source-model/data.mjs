@@ -27,10 +27,9 @@ const rows = Array.from({ length: 30 }, (_, index) => index === 6
   : `<tr><td>${index + 1}</td><td>condición ${index + 1}: sin efecto sobre cancelación, abono o garantía</td><td>anexo-${index + 1}</td></tr>`)
 export const longHtml = `<table border="1"><tr><th>#</th><th>Regla</th><th>Anexo</th></tr>${rows.join("")}</table>`
 
-// The complete original of APP-1: description HTML, custom fields and the
-// comments of its two pages. JSON.stringify is the literal wire form served by
-// the synthetic Jira; stableStringify is the deterministic serialization the
-// runtime produces when the same result is captured as an object.
+// Ground truth of APP-1. The issue read exposes only the comment count; the
+// actual comments must be obtained through their two paginated reads. Keeping
+// them inline would make those extra recoveries artificial and redundant.
 export const issue = {
   key: "APP-1",
   fields: {
@@ -48,7 +47,8 @@ export const issue = {
     },
   },
 }
-export const sourceContent = JSON.stringify(issue)
+export const issueRead = { ...issue, fields: { ...issue.fields, comment: { total: issue.fields.comment.total } } }
+export const sourceContent = JSON.stringify(issueRead)
 // Same structure, keys sorted: the byte-exact blob expected when the identical
 // result is captured as an object (objeto_serializado).
 export const stableStringify = value => {
@@ -57,7 +57,7 @@ export const stableStringify = value => {
     return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`
   return JSON.stringify(value)
 }
-export const sourceObjectContent = stableStringify(issue)
+export const sourceObjectContent = stableStringify(issueRead)
 export const sourceSha256 = createHash("sha256").update(sourceContent).digest("hex")
 export const commentContents = [0, 2].map(startAt => JSON.stringify({ startAt, maxResults: 2, total: 4,
   comments: issue.fields.comment.comments.slice(startAt, startAt + 2) }))
