@@ -59,6 +59,9 @@ export const stableStringify = value => {
 }
 export const sourceObjectContent = stableStringify(issue)
 export const sourceSha256 = createHash("sha256").update(sourceContent).digest("hex")
+export const commentContents = [0, 2].map(startAt => JSON.stringify({ startAt, maxResults: 2, total: 4,
+  comments: issue.fields.comment.comments.slice(startAt, startAt + 2) }))
+export const sourceComponents = { issue: sourceContent, "comments:0": commentContents[0], "comments:2": commentContents[1] }
 
 // The original exigido for completeness credit of this trial. A snapshot that
 // does not declare (or does not cover) these pages and fields is never

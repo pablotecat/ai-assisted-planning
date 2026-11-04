@@ -8,13 +8,14 @@ import test, { type TestContext } from "node:test"
 import { accreditedSourceUse, assertNoRetranscription, blobReader, consentS08, expectedPlugins,
   loadSourceCalls, observedRecoveries, prepareTrial, recordSupervisionFailure, resolveTrialModel,
   reviewChecklistS08, runTrial, sessionArtifactOutputs, verifyArtifactReads, verifyCoverage,
-  verifyReuse, verifyReviewIfExists, verifyTransfer, verifyVersionDifferences } from "./test-support/source-model/verify-model.mjs"
+  verifyReuse, verifyReviewIfExists as verifyReviewRaw, verifyTransfer as verifyTransferRaw, verifyTurn, verifyCoverageGroup,
+  verifyVersionDifferences } from "./test-support/source-model/verify-model.mjs"
 import { evidenceWriter, hash } from "./test-support/evidence-model/verify-model.mjs"
 import { privateRequest, runBounded } from "./test-support/delegation/verify-model.mjs"
 import { withServer } from "./test-support/opencode.mjs"
 import { cancellationRule, contradictionProbe, fuente, guaranteePending, issue, longHtml, promptTurn1,
   promptTurn2, refundRule, reference, requiredCoverage, site, sourceContent, sourceObjectContent,
-  sourceSha256, stableStringify } from "./test-support/source-model/data.mjs"
+  sourceSha256, stableStringify, commentContents } from "./test-support/source-model/data.mjs"
 
 const temp = join(process.env.LOCALAPPDATA!, "Temp/opencode")
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex")
@@ -133,6 +134,17 @@ const blobFor = async (expectedSha: string) => Buffer.from(hash(sourceContent) =
 const recoveryFixture = () => ({ sessionID: "ses_root", messageID: "msg_exec", callID: "call-1", time: 2,
   resultSha256: sourceSha256, started: true, observed: true })
 
+function transferEvidence(snapshots: any[]) {
+  return { receipts: snapshots.map(s => ({ sessionID: s.producerSessionID, messageID: s.producerMessageID,
+    callID: "call-1", time: 3, input: { encargo_id: s.workID, operacion_id: s.operacion_id, fuente: s.fuente,
+      corpus: s.corpus, referencia: s.referencia, version: s.version, paginas: s.cobertura_paginas, campos: s.cobertura_campos,
+      resultado: s.contentSha256 === hash(sourceObjectContent) ? issue : sourceContent },
+    result: { content: JSON.stringify({ instantanea_id: s.id, contenido: { sha256: s.contentSha256, bytes: s.bytes } }) } })),
+    sessions: [{ id: "ses_root", messages: [{ id: "msg_exec", type: "assistant", content: [{ type: "tool", id: "call-1",
+      name: "execute", state: { status: "completed", input: { code: "const original = await tools.jira.getJiraIssue({}); return tools.sesion.capture_agent_source({resultado:original})" } } }] }] }] }
+}
+const verifyTransfer = (args: any) => verifyTransferRaw({ ...transferEvidence(args.snapshots), ...args })
+
 test("S08 transferencia: blob hash = resultado del fixture (string y objeto) en el mismo mensaje de código", async () => {
   const recoveries = [recoveryFixture()]
   const result = await verifyTransfer({ snapshots: [snapshotFixture(), objectSnapshotFixture()], recoveries, blobOf: blobFor })
@@ -144,7 +156,7 @@ test("S08 transferencia: blob hash = resultado del fixture (string y objeto) en 
   assert.equal(result.recuperacionesEnCodigo[0].snapshots.length, 2, "Las dos capturas viven en el mismo execute")
   // A capture in a different message means the original crossed the model.
   await assert.rejects(verifyTransfer({ snapshots: [snapshotFixture({ producerMessageID: "msg_otra" })], recoveries, blobOf: blobFor }),
-    /mismo código\/mensaje/)
+    /mismo execute/)
   // Tampered blob or wrong size breaks the transfer.
   await assert.rejects(verifyTransfer({ snapshots: [snapshotFixture()], recoveries, blobOf: async () => Buffer.from(sourceContent.slice(1)) }))
   await assert.rejects(verifyTransfer({ snapshots: [snapshotFixture({ bytes: 1 })], recoveries, blobOf: blobFor }))
@@ -208,7 +220,7 @@ test("S08 reutilización: turno 2 sin nueva recuperación; repetición registrad
   assert.equal(reuse.repeated[0].callID, "call-2")
   assert.equal(reuse.repeated[0].motivo, null, "La justificación la acredita la revisión, no el driver")
   assert.match(reuse.repeated[0].nota, /ampliación de alcance o un cambio de versión/)
-  const accredited = verifyReuse({ calls: first, prompt2At: 300 })
+  const accredited = verifyReuse({ calls: first, prompt2At: 300, sourceUse: true })
   assert.deepEqual([accredited.turn1.length, accredited.turn2.length, accredited.reuseAccredited], [1, 0, true])
   assert.deepEqual(accredited.repeated, [])
   // Contradictory sources stay recorded and out of the recovery count.
@@ -227,8 +239,11 @@ function readOutputPages(content: string, page: number) {
     corpus: site.cloudId, referencia: reference, representacion: "texto_literal", formato: "texto" }
 }
 function sessionsWithToolParts(parts: any, sessionID = parent.id) {
-  const content = parts.map((output: any) => ({ type: "tool", name: "session_artifacts",
-    state: { status: "completed", input: {}, content: [{ type: "text", text: JSON.stringify(output) }] } }))
+  const content = parts.map((output: any, index: number) => ({ type: "tool", id: `call-${index}`, name: "session_artifacts",
+    state: { status: "completed", input: { action: "read", encargo_id: "work-1", corpus: site.cloudId, referencia: reference,
+      artefacto_id: output.artefacto_id, archivo: output.archivo, ...(output.vista ? { vista: output.vista } : {}),
+      ...(output.inicio > 0 ? { cursor: `cursor-${output.inicio / 1600}` } : {}) },
+      content: [{ type: "text", text: JSON.stringify({ fuente, corpus: site.cloudId, referencia: reference, ...output }) }] } }))
   return [{ id: sessionID, agent: "investigador",
     messages: [{ id: "msg_read", type: "assistant", finish: "stop", content }] }]
 }
@@ -258,10 +273,10 @@ test("S08 lecturas: curso completo por cursor y vista linea íntegros; lectura p
     name: "session_artifacts", state: { status: "error", content: [] } }] }] }], snapshot).leida, false)
   // False reuse: only a known route/hash, no real read anywhere.
   const outputs = sessionArtifactOutputs(sessionsWithToolParts(pages))
-  const backed = accreditedSourceUse({ outputs, snapshots: [snapshot], recoveries: [recoveryFixture()] })
+  const backed = accreditedSourceUse({ snapshots: [snapshot], readings: [result] })
   assert.equal(backed.acreditado, true)
   assert.deepEqual(backed.snapshotsConLectura, ["snap-literal"])
-  const unbacked = accreditedSourceUse({ outputs: [], snapshots: [snapshot], recoveries: [] })
+  const unbacked = accreditedSourceUse({ snapshots: [snapshot] })
   assert.equal(unbacked.acreditado, false)
   assert.deepEqual(unbacked.snapshotsSoloCitables, ["snap-literal"], "Citar la ruta o hash conocido no es leer")
 })
@@ -270,45 +285,45 @@ test("S08 lecturas: curso completo por cursor y vista linea íntegros; lectura p
 
 function reviewStates(extra: object = {}) {
   return [{ work: { "work-1": { id: "work-1", reviews: [{ sessionID: "ses_revisor", artifactID: "art-1" }] } },
-    artifacts: { "art-1": { id: "art-1", producerSessionID: "ses_prod", manifestHash: "hash-manifiesto-1" } },
+    artifacts: { "art-1": { id: "art-1", workID: "work-1", producerSessionID: "ses_prod", manifestHash: "hash-manifiesto-1" } },
     reviews: { "art-1": { artifactID: "art-1", manifestHash: "hash-manifiesto-1", reviewerSessionID: "ses_revisor",
       reports: [], verdict: { artefacto_id: "art-1", hash_manifiesto: "hash-manifiesto-1", resultado: "favorable",
         alcance: [], aprobados: [], pendientes: [], bloqueados: [] } } }, ...extra }]
 }
-const producerSnapshots = () => [{ id: "snap-a", producerSessionID: "ses_prod", contentSha256: hash(sourceContent), fuente }]
-const reviewerSessions = (artefacto_id = "snap-a") => [{ id: "ses_revisor", agent: "revisor", messages: [{ id: "msg_rev",
-  type: "assistant", finish: "stop", content: [{ type: "tool", name: "session_artifacts",
-    state: { status: "completed", input: {}, content: [{ type: "text", text: JSON.stringify({ artefacto_id,
-      instantanea: true, contenido: sourceContent, inicio: 0, fin: sourceContent.length, total: sourceContent.length, cursor: null }) }] } }] }] }]
+const producerSnapshots = () => [snapshotFixture({ id: "snap-a", producerSessionID: "ses_prod" })]
+const reviewerSessions = (artefacto_id = "snap-a") => sessionsWithToolParts([{ ...readOutputPages(sourceContent, 0),
+  artefacto_id, contenido: sourceContent, fin: sourceContent.length, cursor: null }], "ses_revisor")
+  .map(s => ({ ...s, agent: "revisor", parentID: "ses_prod" }))
+const verifyReviewIfExists = (args: any) => verifyReviewRaw({ blobOf: blobFor, ...args })
 
-test("S08 revisión (si existe): lectura propia de la misma versión y dictamen exacto; sin herencia ni versión equivocada", () => {
-  const verified = verifyReviewIfExists({ states: reviewStates(), sessions: reviewerSessions(), snapshots: producerSnapshots() })
+test("S08 revisión (si existe): lectura propia de la misma versión y dictamen exacto; sin herencia ni versión equivocada", async () => {
+  const verified = await verifyReviewIfExists({ states: reviewStates({ reviews: {} }), sessions: reviewerSessions(), snapshots: producerSnapshots() })
   assert.equal(verified.exists, true)
   assert.equal(verified.reviews.length, 1)
-  assert.equal(verified.reviews[0].verdict.resultado, "favorable")
+  assert.equal(verified.reviews[0].verdict, null, "Sin informe nativo confirmado no se acredita dictamen")
   assert.deepEqual(verified.reviews[0].versionesLeidas, [hash(sourceContent)])
   // No review at all stays pending for a separate reviewer, never approved.
-  assert.deepEqual(verifyReviewIfExists({ states: [{}], sessions: [], snapshots: [] }), { exists: false })
+  assert.deepEqual(await verifyReviewIfExists({ states: [{}], sessions: [], snapshots: [] }), { exists: false })
   // The reviewer read a different version than the one the delivery used.
   const wrongVersion = [...producerSnapshots(), { id: "snap-vieja", producerSessionID: "ses_otro",
     contentSha256: hash("version anterior"), fuente }]
-  assert.throws(() => verifyReviewIfExists({ states: reviewStates(), sessions: reviewerSessions("snap-vieja"), snapshots: wrongVersion }), /misma versión/)
+  await assert.rejects(verifyReviewIfExists({ states: reviewStates({ reviews: {} }), sessions: reviewerSessions("snap-vieja"), snapshots: wrongVersion }), /leer realmente/)
   // Inherited approval: the reviewer never read the source itself.
-  assert.throws(() => { verifyReviewIfExists({ states: reviewStates(), sessions: [{ id: "ses_revisor", agent: "revisor", messages: [] }], snapshots: producerSnapshots() }) }, /leer realmente la fuente/)
+  await assert.rejects(verifyReviewIfExists({ states: reviewStates({ reviews: {} }), sessions: [{ id: "ses_revisor", parentID: "ses_prod", agent: "revisor", messages: [] }], snapshots: producerSnapshots() }), /leer realmente la fuente/)
   // Reviewer cannot be the producer of the delivery.
   const selfReview = [{ ...reviewStates()[0], artifacts: { "art-1": { id: "art-1",
     producerSessionID: "ses_revisor", manifestHash: "hash-manifiesto-1" } } }]
-  assert.throws(() => verifyReviewIfExists({ states: selfReview,
+  await assert.rejects(verifyReviewIfExists({ states: selfReview,
     sessions: [{ id: "ses_revisor", agent: "revisor", messages: [] }], snapshots: producerSnapshots() }), /productor/)
   // Exact approval: wrong manifest hash or artifact in the verdict is rejected.
   const base = reviewStates()
   const verdict = (base[0].reviews["art-1"] as any).verdict
-  assert.throws(() => verifyReviewIfExists({ states: reviewStates({ reviews: { "art-1": { ...base[0].reviews["art-1"],
+  await assert.rejects(verifyReviewIfExists({ states: reviewStates({ reviews: { "art-1": { ...base[0].reviews["art-1"],
     verdict: { ...verdict, hash_manifiesto: "otro" } } } }), sessions: reviewerSessions(), snapshots: producerSnapshots() }), /hash exacto/)
-  assert.throws(() => verifyReviewIfExists({ states: reviewStates({ reviews: { "art-1": { ...base[0].reviews["art-1"],
+  await assert.rejects(verifyReviewIfExists({ states: reviewStates({ reviews: { "art-1": { ...base[0].reviews["art-1"],
     verdict: { ...verdict, artefacto_id: "art-otro" } } } }), sessions: reviewerSessions(), snapshots: producerSnapshots() }), /entrega exacta/)
   // A review with no verdict yet is still a review with its reads verified.
-  const pending = verifyReviewIfExists({ states: reviewStates({ reviews: {} }), sessions: reviewerSessions(), snapshots: producerSnapshots() })
+  const pending = await verifyReviewIfExists({ states: reviewStates({ reviews: {} }), sessions: reviewerSessions(), snapshots: producerSnapshots() })
   assert.equal(pending.reviews[0].verdict, null)
 })
 
@@ -329,6 +344,95 @@ test("S08 revisión requerida: nunca autoaprueba con palabras ni hashes; suffici
   assert.equal(checklist.recuperacionesObservadas.reuseAccredited, true)
   assert.match(JSON.stringify(checklist), /nunca autoaprobar/i)
   assert.ok(checklist.evidence.includes("review-required.json") && checklist.evidence.includes("fixture-calls.json"))
+})
+
+test("S08 revisión nativa: fuente y entrega completas antes del dictamen; bytes de informe exactos", async () => {
+  const root = await mkdtemp(join(temp, "s08-review-driver-"))
+  const deliveryText = "Entrega completa v1", reportText = "Cotejo independiente completo"
+  const manifest = (path: string, text: string) => [{ path, sha256: hash(text), bytes: Buffer.byteLength(text) }]
+  const files = manifest("delivery.md", deliveryText), reportFiles = manifest("delivery-sanity-check.md", reportText)
+  await writeFile(join(root, files[0].path), deliveryText)
+  await writeFile(join(root, reportFiles[0].path), reportText)
+  const delivery: any = { id: "art-1", workID: "work-1", producerSessionID: "ses_prod", files,
+    manifestHash: hash(JSON.stringify(files)), deliveries: ["delivery.md"] }
+  const report: any = { id: "report-1", producerSessionID: "ses_revisor", producerMessageID: "msg-publish",
+    files: reportFiles, manifestHash: hash(JSON.stringify(reportFiles)), origin: { delivery: "delivery.md" } }
+  const verdict = { artefacto_id: delivery.id, hash_manifiesto: delivery.manifestHash, resultado: "favorable" }
+  const output = { artefacto_id: report.id, sesion: root, hash_manifiesto: report.manifestHash }
+  const states = [{ work: { "work-1": { id: "work-1", corpus: site.cloudId, referencia: reference,
+    reviews: [{ sessionID: "ses_revisor", artifactID: delivery.id }] } }, artifacts: { [delivery.id]: delivery, [report.id]: report },
+    operations: { delivery: { phase: "confirmed", artifact: delivery, result: { sesion: root } },
+      report: { phase: "confirmed", artifact: report, result: output } },
+    reviews: { report: { artifactID: delivery.id, reviewerSessionID: "ses_revisor", reportArtifactID: report.id, verdict } } }]
+  const sourceReads: any = reviewerSessions()[0]
+  const deliveryReads: any = sessionsWithToolParts([{ artefacto_id: delivery.id, archivo: "delivery.md", sha256: hash(deliveryText),
+    contenido: deliveryText, inicio: 0, fin: deliveryText.length, total: deliveryText.length, cursor: null }], "ses_revisor")[0]
+  const publication: any = { id: "msg-publish", type: "assistant", content: [{ type: "tool", name: "write_review_documents",
+    state: { status: "completed", input: { entrega: join(root, "delivery.md"), sanidad: reportText, dictamen: verdict },
+      content: [{ type: "text", text: JSON.stringify(output) }] } }] }
+  const sessions = [{ ...sourceReads, messages: [sourceReads.messages[0], deliveryReads.messages[0], publication] }]
+  assert.equal((await verifyReviewIfExists({ states, sessions, snapshots: producerSnapshots() })).reviews[0].verdict.resultado, "favorable")
+  const late = [{ ...sessions[0], messages: [publication, sourceReads.messages[0], deliveryReads.messages[0]] }]
+  await assert.rejects(verifyReviewIfExists({ states, sessions: late, snapshots: producerSnapshots() }), /leer realmente/)
+  await writeFile(join(root, reportFiles[0].path), "informe adulterado")
+  await assert.rejects(verifyReviewIfExists({ states, sessions, snapshots: producerSnapshots() }), /bytes changed/)
+})
+
+test("S08 aceptación adversarial: mismo mensaje/hash no sustituye el mismo execute ni el tipo recibido", async () => {
+  const snapshot = snapshotFixture(), evidence = transferEvidence([snapshot])
+  await assert.rejects(verifyTransferRaw({ snapshots: [snapshot], recoveries: [recoveryFixture()], blobOf: blobFor,
+    ...evidence, receipts: evidence.receipts.map(r => ({ ...r, callID: "otro-execute" })) }), /mismo execute/)
+  await assert.rejects(verifyTransferRaw({ snapshots: [snapshot], recoveries: [recoveryFixture()], blobOf: blobFor,
+    ...evidence, receipts: [] }), /Recibo nativo/)
+  const declared = snapshotFixture({ representacion: "objeto_serializado" })
+  const exact = transferEvidence([declared])
+  exact.receipts[0].input.representacion = "objeto_serializado"
+  const kept = await verifyTransferRaw({ snapshots: [declared], recoveries: [recoveryFixture()], blobOf: blobFor, ...exact })
+  assert.equal(kept.transfers[0].contentSha256, sourceSha256, "Etiqueta objeto_serializado no reserializa un string")
+})
+
+test("S08 aceptación adversarial: líneas correctas con contenido falso, cursor final falso y mezcla de actores no acreditan lectura", () => {
+  const snapshot = snapshotFixture(), pages = Array.from({ length: Math.ceil(sourceContent.length / 1600) }, (_, n) => readOutputPages(sourceContent, n))
+  const fakeLine = sessionsWithToolParts([{ artefacto_id: snapshot.id, archivo: snapshot.archivo, vista: "linea", instantanea: true,
+    total_lineas: 1, total_unidades: sourceContent.length, lineas: [{ numero: 1, contenido: "contenido contradictorio" }], cursor: null }])
+  assert.equal(verifyArtifactReads(fakeLine, snapshot).lecturasCompletas, false)
+  const badCursor = structuredClone(pages); badCursor.at(-1)!.cursor = "todavia-pendiente"
+  assert.equal(verifyArtifactReads(sessionsWithToolParts(badCursor), snapshot).lecturasCompletas, false)
+  const mixed = [...sessionsWithToolParts([pages[0]], "actor-a"), ...sessionsWithToolParts(pages.slice(1), "actor-b")]
+  assert.equal(verifyArtifactReads(mixed, snapshot).lecturasCompletas, false)
+  const badInput = sessionsWithToolParts(pages)
+  for (const part of badInput[0].messages[0].content) part.state.input.corpus = "otro"
+  assert.equal(verifyArtifactReads(badInput, snapshot).lecturasCompletas, false)
+})
+
+test("S08 admisión: idle previo, input no admitido y primer turno sin final impiden enviar el segundo", () => {
+  const admission = { inboxID: "user-1", messageID: "assistant-1" }
+  const input = { id: "user-1", type: "user", text: promptTurn1 }
+  const final = { id: "assistant-1", type: "assistant", finish: "stop", content: [{ type: "text", text: "resultado" }] }
+  assert.throws(() => verifyTurn([{ type: "idle" }, input, final], admission, promptTurn1), /Admisión/)
+  assert.throws(() => verifyTurn([final, { type: "idle" }], admission, promptTurn1), /Admisión/)
+  assert.throws(() => verifyTurn([input, { ...final, finish: "tool_calls" }, { type: "idle" }], admission, promptTurn1), /Admisión/)
+  assert.equal(verifyTurn([input, final, { type: "idle" }], admission, promptTurn1).id, final.id)
+})
+
+test("S08 componentes: páginas separadas completan solo su versión; repetición de comentarios delegada cuenta", () => {
+  const snapshots = [snapshotFixture(), snapshotFixture({ id: "page1", cobertura_paginas: { recuperadas: [1], pendientes: [2], total: 2 } }),
+    snapshotFixture({ id: "page2", cobertura_paginas: { recuperadas: [2], pendientes: [], total: 2 } })]
+  const transfers = [{ snapshotID: snapshots[0].id, component: "issue" }, { snapshotID: "page1", component: "comments:0" },
+    { snapshotID: "page2", component: "comments:2" }]
+  assert.equal(verifyCoverageGroup(snapshots, transfers).completa, true)
+  assert.equal(verifyCoverageGroup(snapshots.slice(0, 2), transfers).completa, false)
+  snapshots[2].version = { tipo: "referencia", valor: "version-distinta" }
+  assert.equal(verifyCoverageGroup(snapshots, transfers).completa, false)
+  const calls = [0, 1].flatMap(n => [callFixture("started", { name: "getJiraIssueComments", component: "comments:0", invocationID: `read-${n}`,
+    sessionID: n ? "ses_delegado" : "ses_root", time: 10 + n }), callFixture("completed", { name: "getJiraIssueComments",
+    component: "comments:0", invocationID: `read-${n}`, sessionID: n ? "ses_delegado" : "ses_root", time: 20 + n,
+    resultSha256: hash(commentContents[0]), result: commentContents[0] })])
+  const reuse = verifyReuse({ calls, prompt2At: 100, sourceUse: true })
+  assert.equal(reuse.total, 2)
+  assert.equal(reuse.repeated.length, 1)
+  assert.equal(reuse.reuseAccredited, false, "Cero llamadas en turno 2 no excusa duplicar el recorrido común en turno 1")
+  assert.equal(verifyReuse({ calls: [], prompt2At: 100, sourceUse: true }).reuseAccredited, false)
 })
 
 //// Timeout: cleanup before the final record; credential never fabricated true. ////
@@ -429,7 +533,8 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
   const pagesExpected = Math.ceil(sourceContent.length / readLimit)
   let count = 0, turn = 1
   let workID: string | undefined, literalID: string | undefined, archivo: string | undefined
-  let rawPages = 0, lineViews = 0, reuseViews = 0, published = false
+  let rawPages = 0, lineViews = 0, reuseViews = 0, extraViews = 0, published = false
+  let commentIDs: string[] = []
   const provider = createServer(async (req, res) => {
     const chunks: Buffer[] = []
     for await (const chunk of req) chunks.push(chunk as Buffer)
@@ -454,7 +559,13 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
         const parse = value => typeof value === "string" ? JSON.parse(value) : value;
         const literal = await tools.sesion.capture_agent_source({${base},operacion_id:"cap-app1-literal",resultado:issue});
         const objeto = await tools.sesion.capture_agent_source({${base},operacion_id:"cap-app1-objeto",resultado:parse(issue)});
-        return JSON.stringify({literal: parse(literal), objeto: parse(objeto)})`
+        const comments = [];
+        for (const startAt of [0,2]) {
+          const page = await tools.jira.getJiraIssueComments({cloudId:${JSON.stringify(site.cloudId)},issueIdOrKey:"APP-1",startAt,maxResults:2});
+          comments.push(parse(await tools.sesion.capture_agent_source({${base},operacion_id:"cap-comments-"+startAt,
+            paginas:{recuperadas:[startAt/2+1],pendientes:[],total:2},resultado:page})));
+        }
+        return JSON.stringify({literal: parse(literal), objeto: parse(objeto), comments})`
       delta = tool("execute", { code })
     }
     else if (turn === 1) {
@@ -462,12 +573,14 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
         const caps = JSON.parse(last)
         literalID = caps.literal.instantanea_id
         archivo = caps.literal.archivo
+        commentIDs = caps.comments.map((c: any) => c.instantanea_id)
       }
       const readArgs = (extra: object = {}) => ({ action: "read", encargo_id: workID, corpus: site.cloudId,
         referencia: reference, artefacto_id: literalID, archivo, limite: readLimit, ...extra })
       const cursor = /"cursor"\s*:\s*"([^"]+)"/.exec(last)?.[1]
       if (rawPages === 0 || cursor) { rawPages++; delta = tool("session_artifacts", readArgs(cursor ? { cursor } : {})) }
       else if (lineViews === 0) { lineViews++; delta = tool("session_artifacts", readArgs({ vista: "linea", limite: 500 })) }
+      else if (extraViews < 2) { delta = tool("session_artifacts", readArgs({ artefacto_id: commentIDs[extraViews++], vista: "linea" })) }
       else if (!published) {
         published = true
         delta = tool("write_report_pair", { slug: "consulta", encargo_id: workID, operacion_id: "programmed-s08",
@@ -478,9 +591,9 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
         delta = { content: `PROGRAMMED. Q-CANCELACION: ${cancellationRule}. Q-ABONO: ${refundRule}. Pendientes separados: Q-CANCELACION ninguno; Q-ABONO ninguno. Fuente común reutilizada: APP-1 (${literalID}).` } }
     }
     else {
-      if (reuseViews === 0 && literalID) { reuseViews++
+      if (reuseViews < 3 && literalID) {
         delta = tool("session_artifacts", { action: "read", encargo_id: workID, corpus: site.cloudId, referencia: reference,
-          artefacto_id: literalID, archivo, vista: "linea", limite: 500 }) }
+          artefacto_id: [literalID, ...commentIDs][reuseViews++], archivo, vista: "linea", limite: 500 }) }
       else { finish = "stop"; delta = { content: `PROGRAMMED. Q-GARANTIA: pendiente, ${guaranteePending}. Sin nueva recuperación de la fuente: se usa la ya disponible del encargo (${literalID}).` } }
     }
     res.writeHead(200, { "content-type": "text/event-stream" })
@@ -514,22 +627,22 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
     // One real observed recovery in turn 1; none in turn 2: reuse accredited.
     assert.equal(result.calls.filter((call: any) => call.name === "getJiraIssue" && call.state === "completed").length, 1)
     assert.equal(summary.reuse.reuseAccredited, true)
-    assert.equal(summary.reuse.turn1, 1)
+    assert.equal(summary.reuse.turn1, 3)
     assert.equal(summary.reuse.turn2, 0)
     // Two snapshots of the same source: literal string and deterministic object
     // serialization, byte-exact against the fixture result.
-    assert.equal(result.snapshots.length, 2)
+    assert.equal(result.snapshots.length, 4)
     assert.deepEqual(result.snapshots.map((snapshot: any) => snapshot.contentSha256).sort(),
-      [hash(sourceContent), hash(sourceObjectContent)].sort())
-    assert.equal(summary.transferencia.instantaneas, 2)
-    assert.equal(summary.transferencia.recuperacionesEnCodigo.length, 1)
+      [hash(sourceContent), hash(sourceObjectContent), ...commentContents.map(hash)].sort())
+    assert.equal(summary.transferencia.instantaneas, 4)
+    assert.equal(summary.transferencia.recuperacionesEnCodigo.length, 3)
     assert.equal(summary.transferencia.recuperacionesEnCodigo[0].snapshots.length, 2)
     // Complete coverage declared by the same code that recovered the original.
     assert.equal(summary.cobertura.acreditadaCompleta, true)
     // Full-course cursor reading plus the single >2000-char line by view.
     assert.equal(summary.lecturas.acreditadasCompletas, true)
     const lectures = summary.lecturas.instantaneas as any[]
-    assert.equal(lectures.filter(lecture => lecture.lecturasCompletas).length, 1, "Solo la instantánea leída curso completo")
+    assert.equal(lectures.filter(lecture => lecture.lecturasCompletas).length, 3, "Lectura íntegra de issue y páginas de comentarios")
     assert.ok(lectures.some(lecture => lecture.fullCourse && lecture.paginas === pagesExpected))
     assert.ok(lectures.some(lecture => lecture.lineView))
     // The execute code passed the value directly: no retranscription as text.
@@ -550,7 +663,7 @@ test("S08 motor privado: ensayo determinista de dos turnos con proveedor program
     assert.equal(checklist.sufficientForS08, false)
     assert.ok(checklist.conditions.every((condition: any) => condition.verdict === "pending"))
     assert.equal(checklist.conditions.length, 6)
-    assert.equal(count, pagesExpected + 7, "Una vuelta por página + create/execute/linea/publicación/2 finales")
+    assert.equal(count, pagesExpected + 11, "Una vuelta por página y lecturas íntegras de cada componente en ambos turnos")
     assert.equal(turn, 2)
   }, expectedPlugins)
   await evidenceWriter(root).save("deterministic-verification.json", { providerRequests: count, realModelCalls: 0,
