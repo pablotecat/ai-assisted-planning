@@ -10,7 +10,7 @@ export const captureFields = {
   operacion_id: tool.schema.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/)
     .describe("Identidad lógica de captura: mismo ID y contenido recuperan el mismo resultado; otro ID crea instantánea nueva sin sobrescribir la anterior"),
   representacion: tool.schema.enum(["texto_literal", "objeto_serializado"]).optional()
-    .describe("Cuál representación se obtuvo; sin ella el runtime la deduce del valor recibido (string→texto literal, objeto→serializado determinista)"),
+    .describe("Cuál representación se obtuvo; sin ella el runtime la deduce del valor recibido (cadena→texto literal, objeto→serializado determinista). Una cadena declarada objeto_serializado se valida como objeto JSON y se conserva tal cual, sin re-serializar"),
   version: tool.schema.object({ tipo: tool.schema.enum(["hash", "fecha", "referencia", "otro"]), valor: text })
     .strict().optional().describe("Versión o hash observado de la fuente en esta recuperación"),
   paginas: tool.schema.object({ recuperadas: tool.schema.array(tool.schema.number().int().min(0)).min(1),
@@ -20,7 +20,7 @@ export const captureFields = {
     .strict().optional().describe("Cobertura de campos, incluidos campos personalizados"),
   pendientes: strings.optional().describe("Componentes aún no recuperados; una instantánea no declara completitud sin el original exigido"),
   resultado: tool.schema.union([tool.schema.string(), tool.schema.object({}).passthrough()]).optional()
-    .describe("Respuesta de lectura ya obtenida en este mismo código: texto literal tal cual u objeto que el runtime serializa de forma determinista. No es una retranscripción del modelo"),
+    .describe("Respuesta de lectura ya obtenida en este mismo código: se conserva exactamente lo recibido —una cadena byte a byte (espacios, orden, CRLF), incluso declarada objeto_serializado; un objeto verdadero se serializa de forma determinista—. No es una retranscripción del modelo"),
 }
 export const captureRequest = tool.schema.object(captureFields).strict()
 export type CaptureRequest = SnapshotInput

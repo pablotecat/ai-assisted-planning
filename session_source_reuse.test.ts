@@ -241,6 +241,36 @@ test("S08 8.4 share con guardado desactivado devuelve exactamente {guardado:fals
 
 //// S08 8.5 — reviewer independence over the same complete snapshot. ////
 
+test("S08 aceptación: paginación con más artefactos que fuentes y share alterado/suplantado sin efectos", async t => {
+  const f = await fixture(t)
+  const q1 = await f.create("r", { responsable_session_id: "i" })
+  const q2 = await f.create("r", { responsable_session_id: "i2", pregunta: "Destino" })
+  for (let n = 0; n < 3; n++) await publishSession({ ...f.actor("i"), topic: "resultado",
+    files: { "resultado.md": `Versión ${n}` }, operationID: `pub-${n}`,
+    publicationType: "publish_agent_deliverable", workID: q1.id }, f.options)
+  const captured = await f.capture("i", { encargo_id: q1.id, corpus: "corpus-autorizado", referencia: "ref-v1",
+    fuente: "APP-1", operacion_id: "cap-accept", resultado: "Original íntegro" })
+  const artifacts: string[] = [], snapshots: string[] = []
+  let cursor: string | null = null
+  do {
+    const page = await f.list("r", q1.id, { limite: 1, ...(cursor ? { cursor } : {}) })
+    artifacts.push(...page.artefactos.map((a: any) => a.id))
+    snapshots.push(...page.instantaneas.map((s: any) => s.id))
+    cursor = page.cursor
+  } while (cursor)
+  assert.equal(new Set(artifacts).size, 3)
+  assert.deepEqual(snapshots, [captured.instantanea_id])
+  const input = { action: "share", encargo_id: q2.id, origen_encargo_id: q1.id,
+    instantanea_id: captured.instantanea_id, corpus: "corpus-autorizado", referencia: "ref-v1" } as const
+  const before = JSON.stringify(await f.state())
+  await assert.rejects(sessionArtifacts(input, { ...f.actor("r"), agent: "investigador" }, f.options), /diferente/)
+  await assert.rejects(sessionArtifacts(input, { ...f.actor("r"), messageID: "inventado" }, f.options), /atribuible/)
+  const stateFile = join(f.options.root, ".control", (await readdir(join(f.options.root, ".control")))[0])
+  await writeFile(join(stateFile, "snapshots", captured.contenido.sha256), "Blob adulterado")
+  await assert.rejects(f.share("r", q2.id, q1.id, captured.instantanea_id), /modificado/)
+  assert.equal(JSON.stringify(await f.state()), before, "No se confirma un vínculo con blob adulterado o identidad suplantada")
+})
+
 test("S08 8.5 Revisor: misma instantánea íntegra, cotejo anterior conservado y aprobación no heredada", async t => {
   const f = await fixture(t)
   const w = await f.create("r", { responsable_session_id: "i" })
@@ -251,8 +281,19 @@ test("S08 8.5 Revisor: misma instantánea íntegra, cotejo anterior conservado y
     operationID: "v1", publicationType: "publish_agent_deliverable", workID: w.id }, f.options)
   assert.ok(v1.guardado)
   await f.work("i", { action: "review", encargo_id: w.id, artefacto_id: v1.artefacto_id, revisor_session_id: "review" })
+  const deliveryFile = v1.archivos!.find(file => file.path.endsWith("resultado.md"))!.path
+  assert.equal((await f.read("review", w.id, v1.artefacto_id, deliveryFile)).contenido, "Entrega v1")
+  // Cotejo previo REAL: antes del informe de v1, el Revisor lee la instantánea
+  // completa por identidad (id+archivo) y contrasta contenido y hash — el addendum
+  // R2-B exige que el cotejo mencionado en el informe sea previo a publicarlo.
+  const readBefore = await f.read("review", w.id, captured.instantanea_id, captured.archivo)
+  assert.equal(readBefore.instantanea, true)
+  assert.equal(readBefore.contenido, original, "Lectura íntegra del original por el Revisor antes de su informe")
+  assert.equal(readBefore.sha256, captured.contenido.sha256, "Hash leído contrastado con el recibo de la captura")
+  const hashCotejado = readBefore.sha256
+  const informeV1 = `Cotejo de v1 contra la instantánea ${captured.instantanea_id} sha256 ${hashCotejado}`
   const reviewV1 = await publishReview({ ...f.actor("review"), delivery: v1.rutas["resultado.md"],
-    sanity: "Cotejo de v1 contra la instantánea original",
+    sanity: informeV1,
     verdict: { artefacto_id: v1.artefacto_id, hash_manifiesto: v1.hash_manifiesto, resultado: "favorable",
       alcance: ["entrega"], aprobados: ["entrega"], pendientes: [], bloqueados: [] } }, f.options)
   assert.ok(reviewV1.guardado)
@@ -260,17 +301,26 @@ test("S08 8.5 Revisor: misma instantánea íntegra, cotejo anterior conservado y
   const v2 = await publishSession({ ...f.actor("i"), topic: "resultado", files: { "resultado.md": "Entrega v2 corregida" },
     operationID: "v2", publicationType: "publish_agent_deliverable", workID: w.id }, f.options)
   await f.work("i", { action: "review", encargo_id: w.id, artefacto_id: v2.artefacto_id, revisor_session_id: "review" })
-  // El Revisor LEE la misma instantánea completa por identidad real, no por ruta.
+  const newFile = v2.archivos!.find(file => file.path.endsWith("resultado.md"))!.path
+  assert.equal((await f.read("review", w.id, v2.artefacto_id, newFile)).contenido, "Entrega v2 corregida",
+    "El Revisor lee la nueva entrega completa, no solo el original compartido")
+  // Segunda lectura tras v2: el mismo original sigue accesible por identidad
+  // real (id+archivo) para el cotejo de la nueva versión; no por ruta.
   const read = await f.read("review", w.id, captured.instantanea_id, captured.archivo)
   assert.equal(read.instantanea, true)
   assert.equal(read.contenido, original)
   assert.equal(read.sha256, captured.contenido.sha256)
   const view = await f.read("review", w.id, captured.instantanea_id, captured.archivo, { vista: "linea" })
   assert.deepEqual(view.lineas.map((line: any) => line.contenido), original.split("\r\n"))
-  // Conserva el cotejo verificable anterior: su propio informe de v1 sigue legible.
+  // Conserva el cotejo verificable anterior: su propio informe de v1 sigue legible
+  // y contiene exactamente el id y el hash del original que leyó antes de escribirlo.
   const reportFile = reviewV1.archivos!.find(file => file.path.includes("sanity-check"))!.path
   const priorReport = await f.read("review", w.id, reviewV1.artefacto_id, reportFile)
-  assert.equal(priorReport.contenido, "Cotejo de v1 contra la instantánea original")
+  assert.equal(priorReport.contenido, informeV1, "El informe previo se recupera intacto tras v2")
+  assert.ok(priorReport.contenido.includes(captured.instantanea_id),
+    "El cotejo previo recuperado cita la instantánea original que el Revisor leyó")
+  assert.ok(priorReport.contenido.includes(hashCotejado),
+    "El cotejo previo recuperado cita el hash contrastado del original leído")
   // No hereda aprobación ni estado revisado: los punteros quedan por versión.
   const version = Object.values((await f.state()).versions).find((v: any) => v.workID === w.id && v.type === "publish_agent_deliverable")!
   assert.equal(version.published, v2.artefacto_id)
@@ -286,6 +336,8 @@ test("S08 8.5 Revisor: misma instantánea íntegra, cotejo anterior conservado y
   assert.equal(after.approved, v2.artefacto_id)
   const reread = await f.read("review", w.id, captured.instantanea_id, captured.archivo)
   assert.equal(reread.contenido, original, "El original sin cambios sigue cotejable tras revisar la nueva entrega")
+  assert.equal(reread.sha256, hashCotejado,
+    "La relectura por el Revisor conserva el hash citado en el cotejo previo recuperado")
   // Negativos por identidad y asignación, no por ruta.
   await assert.rejects(f.read("otherReview", w.id, captured.instantanea_id, captured.archivo), /no asignado/)
   await assert.rejects(f.read("sibling", w.id, captured.instantanea_id, captured.archivo), /no asignado/)

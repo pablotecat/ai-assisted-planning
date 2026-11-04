@@ -1,6 +1,6 @@
 # Tasks
 
-**Pausa solicitada el 2026-11-03:** continuar desde [handoff-continuacion.md](handoff-continuacion.md). Estado verificado **47/78**; subagentes detenidos y archivados, entregas privadas sin integrar y dos worktrees con cambios sin commit. Este handoff sustituye los estados históricos «en curso» del tramo R2.
+**Continuación autorizada el 2026-11-04:** recuperado el estado de [handoff-continuacion.md](handoff-continuacion.md), sin reactivar sesiones archivadas. El registro de aceptación actual está en [aceptacion-s08.md](aceptacion-s08.md); sustituye únicamente los estados pendientes de S08, no los informes históricos ni el presupuesto autorizado.
 
 ## Guía de ejecución por sesiones
 
@@ -93,10 +93,10 @@ Pruebas consumidoras: usar configuración y servidor privados según `test-suppo
 **Dependencias duras:** S02, S06. **Cobertura:** M06 y reutilización de M16. **Leer:** spec `evidencia-reutilizable`; D05, D08; consulta Jira, fuentes/evidencias, acceso de artefactos y pruebas de permisos/publicación. **Fuera:** repositorio global de conocimiento y conversor universal de formatos.
 
 - [x] 8.1 Registrar `capture_agent_source` en Code Mode con identidad y guardado del rol, verificando transferencia directa de un resultado de lectura a captura en el mismo código sin retranscripción del modelo, sin convertirse en proxy HTTP ni admitir rutas de destino.
-- [ ] 8.2 Guardar originales y manifiestos de fuente, corpus, recuperación, versión/hash y cobertura por campos/páginas, verificando texto literal y objetos serializados determinísticamente, comentarios paginados, campos personalizados y cambio de versión durante recuperación.
-- [ ] 8.3 Extender lectura por cursor/localizador y vistas derivadas solo de formatos conocidos, verificando HTML de más de 2000 caracteres en una línea con tablas, menciones y numeración recuperables y original intacto; un envoltorio desconocido produce diagnóstico, no undefined interpretado como ausencia.
-- [ ] 8.4 Incorporar búsqueda de evidencia vigente antes de consultar/delegar y transmisión de originales accesibles, verificando dos preguntas con recorrido común y pendientes separados, repetición justificada por cambio de alcance y rechazo por visibilidad/corpus incompatibles.
-- [ ] 8.5 Verificar independencia del Revisor usando la misma instantánea completa y una entrega nueva, comprobando acceso real, conservación del cotejo anterior válido y ausencia de aprobación heredada; mantener enrutado de documentación/código local por sus especialistas.
+- [x] 8.2 Guardar originales y manifiestos de fuente, corpus, recuperación, versión/hash y cobertura por campos/páginas, verificando texto literal y objetos serializados determinísticamente, comentarios paginados, campos personalizados y cambio de versión durante recuperación.
+- [x] 8.3 Extender lectura por cursor/localizador y vistas derivadas solo de formatos conocidos, verificando HTML de más de 2000 caracteres en una línea con tablas, menciones y numeración recuperables y original intacto; un envoltorio desconocido produce diagnóstico, no undefined interpretado como ausencia.
+- [x] 8.4 Incorporar búsqueda de evidencia vigente antes de consultar/delegar y transmisión de originales accesibles, verificando dos preguntas con recorrido común y pendientes separados, repetición justificada por cambio de alcance y rechazo por visibilidad/corpus incompatibles.
+- [x] 8.5 Verificar independencia del Revisor usando la misma instantánea completa y una entrega nueva, comprobando acceso real, conservación del cotejo anterior válido y ausencia de aprobación heredada; mantener enrutado de documentación/código local por sus especialistas.
 - [ ] 8.6 Actualizar consulta Jira, fuentes/evidencias y consumidores con contratos efectivos, probar captura desactivada y ambos alias en consumidor privado, ejecutar suite raíz/diff y entregar handoff con recuperaciones evitadas observadas, no estimadas.
 
 ## 9. S09 — Un adjunto leído antes del lote
