@@ -97,7 +97,7 @@ Pruebas consumidoras: usar configuración y servidor privados según `test-suppo
 - [x] 8.3 Extender lectura por cursor/localizador y vistas derivadas solo de formatos conocidos, verificando HTML de más de 2000 caracteres en una línea con tablas, menciones y numeración recuperables y original intacto; un envoltorio desconocido produce diagnóstico, no undefined interpretado como ausencia.
 - [x] 8.4 Incorporar búsqueda de evidencia vigente antes de consultar/delegar y transmisión de originales accesibles, verificando dos preguntas con recorrido común y pendientes separados, repetición justificada por cambio de alcance y rechazo por visibilidad/corpus incompatibles.
 - [x] 8.5 Verificar independencia del Revisor usando la misma instantánea completa y una entrega nueva, comprobando acceso real, conservación del cotejo anterior válido y ausencia de aprobación heredada; mantener enrutado de documentación/código local por sus especialistas.
-- [ ] 8.6 Actualizar consulta Jira, fuentes/evidencias y consumidores con contratos efectivos, probar captura desactivada y ambos alias en consumidor privado, ejecutar suite raíz/diff y entregar handoff con recuperaciones evitadas observadas, no estimadas.
+- [x] 8.6 Actualizar consulta Jira, fuentes/evidencias y consumidores con contratos efectivos, probar captura desactivada y ambos alias en consumidor privado, ejecutar suite raíz/diff y entregar handoff con recuperaciones evitadas observadas, no estimadas.
 
 ## 9. S09 — Un adjunto leído antes del lote
 
@@ -153,7 +153,7 @@ Pruebas consumidoras: usar configuración y servidor privados según `test-suppo
 
 **Dependencias duras:** S09, S11, S12, S13 y sus dependencias transitivas. **Cobertura:** evaluación de M01–M16. **Leer:** siete specs, handoffs S01–S13 y `design.md`, estrategia de validación/migración. **Fuera:** compensar aquí tests o documentación que una sesión anterior debía entregar.
 
-- [ ] 14.1 Ejecutar campaña sintética integrada de configuración, originales, confirmación concurrente, resultados integrados, promoción, revisión exacta y corrección con nueva revisión; verificar rutas/hash, fuentes completas y todos los criterios sin aprobar contenido por validación mecánica.
+- [ ] 14.1 Ejecutar campaña sintética integrada de configuración, originales, confirmación concurrente, resultados integrados, promoción, revisión exacta y corrección con nueva revisión; verificar rutas/hash, fuentes completas y su reutilización entre preguntas —incluida la conducta S08 pendiente por decisión del usuario de 2026-11-04— y todos los criterios sin aprobar contenido por validación mecánica.
 - [ ] 14.2 Ejecutar variantes integradas de guardado desactivado, denegación, fallo antes de ejecutar, respuesta perdida, reload y sustitución posterior a publicación; verificar efectos únicos, pendientes intactos e intentos de arquitectura conservados.
 - [ ] 14.3 Comprobar en consumidor instalado la convivencia de contratos anteriores/nuevos y actualización/reversión documentadas, verificando JSONC, dependencias, personalizaciones y conflictos legacy preservados, sin reiniciar el servicio compartido ni eliminar entregas nuevas.
 - [ ] 14.4 Reducir con S03 los casos comparables antes/después y registrar camino crítico, concurrencia, conteos por capa, errores, repeticiones, caracteres/versiones y correcciones mecánicas; verificar procedencia, dispersión, ausencia de datos y exclusión de tiempos solapados.
