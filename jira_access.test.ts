@@ -258,8 +258,36 @@ test("contrato documental: consulta puntual anterior al arranque y refinamiento 
   assert.match(privacy, /consentimiento explícito/)
   assert.match(privacy, /\]\(\.\.\/\.\.\/lectura-documental\/SKILL\.md\)/)
   const publication = await readFile(join(source, ".apm", "skills", "operativa-comun", "references", "publicacion-revision.md"), "utf8")
-  for (const required of ["guardado:true", "devuelve siempre el contenido", "versión exacta", "aunque falle", "antes de solicitarla no consume", "Sin historial verificable"])
+  for (const required of ["guardado:true", "entrega siempre el contenido completo", "versión exacta", "aunque falle", "antes de solicitarla no consume", "Sin historial verificable"])
     assert.ok(publication.includes(required), required)
+})
+
+test("contrato documental: ramas activas con lectura íntegra vigente y respuesta proporcional al guardado", async () => {
+  const shared = await readFile(join(source, ".apm", "skills", "operativa-comun", "SKILL.md"), "utf8")
+  assert.match(shared, /solo las referencias de las ramas activas/)
+  assert.match(shared, /lectura íntegra vigente/)
+  assert.match(shared, /no acredita que esta sesión la haya leído/)
+  const publication = await readFile(join(source, ".apm", "skills", "operativa-comun", "references", "publicacion-revision.md"), "utf8")
+  // 13.2: resumen solo tras guardado confirmado y acceso efectivo del receptor.
+  const summary = publication.split(/\r?\n\r?\n/).find(paragraph => paragraph.startsWith("Respeta el guardado configurado."))!
+  assert.ok(summary, "norma de respuesta tras guardado")
+  for (const required of ["el guardado está confirmado", "puede abrir el contenido íntegro", "rutas verificadas, versión, revisión, límites y pendientes",
+    "sin reemitir los documentos", "petición explícita de contenido completo se respeta"])
+    assert.ok(summary!.includes(required), required)
+  // 13.3: alternativa íntegra con guardado desactivado/fallido o receptor sin acceso.
+  for (const required of ["Con guardado desactivado o fallido", "receptor no tiene acceso efectivo",
+    "entrega siempre el contenido completo disponible", "una ruta o un hash no sustituyen el contenido recibido",
+    "conserva de forma explícita el impedimento", "no eludes permisos para resumir",
+    "evidencia accesible, impacto y siguiente acción", "no convierte una preentrega en candidata completa"])
+    assert.ok(publication.includes(required), required)
+  // Sin duplicación: los roles y Jira no repiten la norma de respuesta; conservan sus cierres por puntero.
+  const originals = await readFile(join(source, ".apm", "skills", "consulta-jira", "SKILL.md"), "utf8")
+  assert.ok(originals.includes("devuelve siempre el contenido recuperado") && !originals.includes("sin reemitir los documentos"))
+  for (const name of ["investigador", "planificador", "refinador", "revisor", "lector-documentacion", "lector-codigo"]) {
+    const text = await readFile(join(source, ".apm", "agents", `${name}.agent.md`), "utf8")
+    assert.ok(!text.includes("devuelve siempre el contenido"), name)
+    assert.ok(!text.includes("sin reemitir los documentos"), name)
+  }
 })
 
 test("contrato documental: interfaz directa, catálogo parcial y estados de publicación diferenciados", async () => {

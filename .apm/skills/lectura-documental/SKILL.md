@@ -1,11 +1,11 @@
 ---
 name: lectura-documental
-description: Lee fuentes documentales cuando haya Markdown o texto, conversiones MarkItDown a salida estándar o conversiones temporales para glosarios y reuniones.
+description: Lee fuentes documentales y adjuntos, prueba una imagen antes de un lote y aplica conversiones MarkItDown a salida estándar o temporales según el consumidor.
 ---
 
 # Lectura documental
 
-1. Lee Markdown y texto directamente. Para otros formatos compatibles, comprueba `markitdown --version`; consulta `markitdown --help` si necesitas confirmar la interfaz. Identifica cada fuente original y el método usado antes de atribuirle contenido.
+1. Lee Markdown y texto directamente. Para imágenes o lotes de adjuntos aplica [prueba representativa de adjuntos](references/adjuntos.md) antes de continuar; su presentación visual es distinta de una conversión a texto. Para otros formatos compatibles, comprueba `markitdown --version`; consulta `markitdown --help` si necesitas confirmar la interfaz. Identifica cada fuente original y el método usado antes de atribuirle contenido.
 2. Elige la rama de conversión según el consumidor y sus permisos. Sigue también [fuentes y evidencias](../operativa-comun/references/fuentes-evidencias.md) al usar el contenido. Cierra la ingesta cuando cada fuente tenga estado de lectura y localizador original.
 
 ## Salida estándar — Lector Documentación

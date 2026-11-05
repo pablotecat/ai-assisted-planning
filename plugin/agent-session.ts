@@ -11,7 +11,7 @@ import writePlanningDeliverables from "../tools/write_planning_deliverables.ts"
 import writeReportPair from "../tools/write_report_pair.ts"
 import writeReviewDocuments from "../tools/write_review_documents.ts"
 import sessionWork from "../tools/session_work.ts"
-import sessionArtifacts from "../tools/session_artifacts.ts"
+import sessionArtifacts, { nativeArtifactContent } from "../tools/session_artifacts.ts"
 import captureAgentSource from "../tools/capture_agent_source.ts"
 import { makeIdentity } from "../tools/identity.ts"
 
@@ -60,8 +60,9 @@ export default Plugin.define({
             await ctx.permission.assert({ sessionID: context.sessionID, agent: context.agent,
               source: { type: "tool", messageID: context.messageID, id: context.id },
               action: permission, resources: ["*"], save: ["*"] })
-            return { content: await definition.execute(schema.parse(input) as never,
-              { ...context, resolver: identity } as never) as string }
+            const content = await definition.execute(schema.parse(input) as never,
+              { ...context, resolver: identity } as never) as string
+            return { content: name === "session_artifacts" ? nativeArtifactContent(content) : content }
           },
         })
       }

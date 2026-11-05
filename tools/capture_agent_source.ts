@@ -9,8 +9,8 @@ export const captureFields = {
   fuente: text.describe("Identificador de la fuente dentro del corpus, p. ej. APP-1"),
   operacion_id: tool.schema.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/)
     .describe("Identidad lógica de captura: mismo ID y contenido recuperan el mismo resultado; otro ID crea instantánea nueva sin sobrescribir la anterior"),
-  representacion: tool.schema.enum(["texto_literal", "objeto_serializado"]).optional()
-    .describe("Cuál representación se obtuvo; sin ella el runtime la deduce del valor recibido (cadena→texto literal, objeto→serializado determinista). Una cadena declarada objeto_serializado se valida como objeto JSON y se conserva tal cual, sin re-serializar"),
+  representacion: tool.schema.enum(["texto_literal", "objeto_serializado", "png_base64"]).optional()
+    .describe("Sin ella: cadena→texto literal, objeto→serializado determinista. objeto_serializado conserva una cadena JSON tal cual. png_base64 recibe los bytes PNG codificados directamente en el mismo execute: (await respuesta.bytes()).toBase64(); el runtime guarda el binario intacto, no texto base64. Su captura no acredita lectura visual"),
   version: tool.schema.object({ tipo: tool.schema.enum(["hash", "fecha", "referencia", "otro"]), valor: text })
     .strict().optional().describe("Versión o hash observado de la fuente en esta recuperación"),
   paginas: tool.schema.object({ recuperadas: tool.schema.array(tool.schema.number().int().min(0)).min(1),
@@ -20,7 +20,7 @@ export const captureFields = {
     .strict().optional().describe("Cobertura de campos, incluidos campos personalizados"),
   pendientes: strings.optional().describe("Componentes aún no recuperados; una instantánea no declara completitud sin el original exigido"),
   resultado: tool.schema.union([tool.schema.string(), tool.schema.object({}).passthrough()]).optional()
-    .describe("Respuesta de lectura ya obtenida en este mismo código: se conserva exactamente lo recibido —una cadena byte a byte (espacios, orden, CRLF), incluso declarada objeto_serializado; un objeto verdadero se serializa de forma determinista—. No es una retranscripción del modelo"),
+    .describe("Respuesta ya obtenida en este mismo código, sin retranscripción del modelo. Texto literal exacto u objeto serializado determinísticamente; para png_base64, base64 canónico de los bytes PNG obtenidos con (await respuesta.bytes()).toBase64(), no data URI ni ruta"),
 }
 export const captureRequest = tool.schema.object(captureFields).strict()
 export type CaptureRequest = SnapshotInput

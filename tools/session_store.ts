@@ -5,6 +5,9 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { readAgentSettings, sessionRoot, type AgentName } from "./agent_settings.ts"
 import { artifactRequest, workRequest, type ArtifactRequest, type WorkRequest } from "./work_contract.ts"
 import { changeExecution, checkWorkClosure, workMessages, type Execution, type NativeMessage, type Closure } from "./work_execution.ts"
+import { sourcePng } from "./source_media.ts"
+import { validationContract } from "./deliverable_contract.ts"
+import { DeliverableValidationError, validateDeliverable, type ValidationInput, type ValidationReport } from "./deliverable_validation.ts"
 
 export type Identity = { id: string; parentID?: string; agent: string; title: string; created: number; directory: string }
 export type Resolver = ((id: string, messageID?: string) => Promise<Identity>) & {
@@ -38,6 +41,7 @@ export type Artifact = {
   id: string; rootSessionID: string; producerSessionID: string; agent: string; type: string;
   files: ManifestFile[]; manifestHash: string; deliveries: string[]; directory?: string;
   workID?: string; producerMessageID?: string; closure?: Closure;
+  validation?: { input: ValidationInput; report: ValidationReport };
   previous?: string; origin: { type: "literal" | "promotion"; delivery?: string; files?: Record<string, FileOrigin> }
 }
 // D08: la captura conserva la respuesta original de una fuente, ya obtenida
@@ -48,7 +52,7 @@ export type SourceCoveragePages = { recuperadas: number[]; pendientes: number[];
 export type SourceCoverageFields = { recuperados: string[]; pendientes: string[] }
 export type SnapshotInput = {
   encargo_id: string; corpus: string; referencia: string; fuente: string; operacion_id: string
-  representacion?: "texto_literal" | "objeto_serializado"
+  representacion?: "texto_literal" | "objeto_serializado" | "png_base64"
   version?: { tipo: "hash" | "fecha" | "referencia" | "otro"; valor: string }
   paginas?: SourceCoveragePages; campos?: SourceCoverageFields; pendientes?: string[]
   resultado?: string | Record<string, unknown>
@@ -57,7 +61,7 @@ export type Snapshot = {
   id: string; operacionKey: string; operacion_id: string; digest: string
   rootSessionID: string; workID: string; producerSessionID: string; agent: string; producerMessageID?: string
   fuente: string; corpus: string; referencia: string; archivo: string
-  contentSha256: string; bytes: number; representacion: "texto_literal" | "objeto_serializado"; formato: string; created: number
+  contentSha256: string; bytes: number; representacion: "texto_literal" | "objeto_serializado" | "png_base64"; formato: string; created: number
   version?: { tipo: "hash" | "fecha" | "referencia" | "otro"; valor: string }
   cobertura_paginas?: SourceCoveragePages; cobertura_campos?: SourceCoverageFields; pendientes?: string[]
   // 8.4 minimum explicit link: workIDs authorized to read a snapshot produced by
@@ -73,7 +77,7 @@ export type Work = { id: string; rootSessionID: string; ownerSessionID: string; 
   assignments: string[]; agents: Record<string, string>; events: WorkEvent[]; reviews: { sessionID: string; artifactID: string }[];
   required?: boolean; executions?: Execution[] }
 type Saved = { guardado: true; rutas: Record<string, string>; sesion: string;
-  artefacto_id: string; hash_manifiesto: string; operacion_id: string; archivos?: ManifestFile[]; cierre?: Closure }
+  artefacto_id: string; hash_manifiesto: string; operacion_id: string; archivos?: ManifestFile[]; cierre?: Closure; validacion?: ValidationReport }
 type Operation = {
   id: string; logicalID: string; type: string; producerSessionID: string; agent: string; digest: string;
   phase: "prepared" | "materialized" | "confirmed"; artifact: Artifact;
@@ -90,6 +94,28 @@ type Options = { get: Resolver; root?: string; settingsPath?: string;
   checkpoint?: (phase: string) => void | Promise<void> }
 
 const hash = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex")
+
+// S11: exact transformations over an in-memory copy of promoted bytes. The
+// source stays intact; ambiguous operations are rejected whole.
+function applyTransformations(bytes: Uint8Array, origin: FileOrigin) {
+  let content = bytes.toString("utf8")
+  if (origin.extraccion) {
+    const lines = content.split(/\r?\n/)
+    const starts = lines.map((line, index) => line.replace(/^# /, "").trim() === origin.extraccion!.encabezado ? index : -1)
+      .filter(index => index >= 0)
+    if (starts.length !== 1)
+      throw new Error("Extracción sin delimitación única: sección inexistente o duplicada, sin selección heurística")
+    const end = lines.findIndex((line, index) => index > starts[0] && /^# /.test(line))
+    content = lines.slice(starts[0], end === -1 ? undefined : end).join("\n") + "\n"
+  }
+  for (const cambio of origin.transformaciones ?? []) {
+    const found = content.split(cambio.anterior).length - 1
+    if (found !== cambio.coincidencias)
+      throw new Error(`Sustitución ambigua: ${found} coincidencias encontradas frente a ${cambio.coincidencias} esperadas; operación rechazada sin cambios parciales`)
+    content = content.split(cambio.anterior).join(cambio.nuevo)
+  }
+  return content
+}
 const portable = (path: string) => path.replace(/\\/g, "/")
 
 export function manifest(files: Record<string, string | Uint8Array>) {
@@ -447,7 +473,26 @@ function operationKey(sessionID: string, type: string, logicalID: string) {
 
 type Request = { sessionID: string; messageID?: string; operationID: string; type: string; agent: string; topic: string;
   files: Record<string, FileInput>; sources?: string[]; decisions?: string[]; keys?: string[]; group?: string; delivery?: string; verdict?: Verdict; workID?: string;
-  closure?: Closure; partial?: { proposito: string; efecto: string; siguiente_accion: string } }
+  closure?: Closure; partial?: { proposito: string; efecto: string; siguiente_accion: string };
+  validation?: ValidationInput; validationReport?: ValidationReport }
+
+async function validateFiles(input: Request, files: Record<string, string | Uint8Array>, state: State,
+  stateDir: string, nodes: Identity[], options: Options) {
+  const sources: Record<string, string> = {}
+  for (const source of input.validation?.fuentes ?? []) {
+    const work = input.workID ? await authorizedWork(state, input.workID, nodes, options) : undefined
+    const snapshot = state.snapshots[source.instantanea_id]
+    if (!work || !snapshot || snapshot.corpus !== work.corpus || snapshot.referencia !== work.referencia ||
+        !await canReadSource(snapshot, work, nodes, state, options))
+      throw new Error("Fuente de validación no asignada al encargo/corpus")
+    if (snapshot.representacion === "png_base64") throw new Error("El perfil literal requiere una fuente textual")
+    sources[source.id] = (await sourceBlob(stateDir, snapshot)).toString("utf8")
+  }
+  const report = validateDeliverable(Object.fromEntries(Object.entries(files).map(([name, text]) =>
+    [name, typeof text === "string" ? text : Buffer.from(text).toString("utf8")])), input.validation, sources)
+  if (report.errores.length) throw new DeliverableValidationError(report)
+  return report
+}
 
 async function resolveFiles(input: Request, state: State, sessionDir: string, nodes: Identity[], options: Options) {
   const files: Record<string, string | Uint8Array> = {}
@@ -475,14 +520,14 @@ async function resolveFiles(input: Request, state: State, sessionDir: string, no
     await verifyArtifact(sessionDir, artifact, state)
     const path = join(sessionDir, file.path)
     const sourceName = Object.keys(operation.paths).find(key => portable(relative(sessionDir, operation.paths[key])) === file.path)
-    if (input.type === "write_planning_deliverables" && sourceName !== name)
+    if (input.type === "write_planning_deliverables" && sourceName !== name && !origin.extraccion)
       throw new Error("La promoción de historias requiere archivos finales separados con su nombre; borrador.md no es una historia final")
     if (artifact.type === "write_planning_deliverables" && Object.keys(operation.paths).some(key => !(key in input.files)))
       throw new Error("La promoción debe conservar todos los archivos de la entrega del Planificador")
     const bytes = await readFile(path)
     if (hash(bytes) !== origin.sha256 || bytes.length !== file.bytes) throw new Error("Hash de origen incorrecto")
     if (!bytes.toString("utf8").trim()) throw new Error("Entregables vacíos")
-    files[name] = bytes
+    files[name] = origin.extraccion || origin.transformaciones?.length ? applyTransformations(bytes, origin) : bytes
   }
   return files
 }
@@ -490,10 +535,12 @@ async function resolveFiles(input: Request, state: State, sessionDir: string, no
 function requestDigest(input: Request) {
   return hash(JSON.stringify({ type: input.type, topic: input.topic, group: input.group ?? null, delivery: input.delivery ?? null,
     files: Object.keys(input.files).sort().map(name => { const file = input.files[name]; return [name,
-      typeof file === "string" ? file : { artefacto_id: file.artefacto_id, archivo: file.archivo, sha256: file.sha256 }] }),
+      typeof file === "string" ? file : { artefacto_id: file.artefacto_id, archivo: file.archivo, sha256: file.sha256,
+        ...(file.transformaciones ? { transformaciones: file.transformaciones } : {}),
+        ...(file.extraccion ? { extraccion: file.extraccion } : {}) }] }),
     sources: input.sources ?? [], decisions: input.decisions ?? [], keys: input.keys ?? [],
     ...(input.verdict ? { verdict: input.verdict } : {}), ...(input.workID ? { workID: input.workID } : {}),
-    ...(input.partial ? { partial: input.partial } : {}) }))
+    ...(input.partial ? { partial: input.partial } : {}), ...(input.validation ? { validation: input.validation } : {}) }))
 }
 
 async function prepare(state: State, stateDir: string, sessionDir: string, nodes: Identity[], input: Request, key: string,
@@ -510,6 +557,7 @@ async function prepare(state: State, stateDir: string, sessionDir: string, nodes
     agent: input.agent, type: input.type, files: identity.files, manifestHash: identity.hash, deliveries,
     ...(input.workID ? { workID: input.workID } : {}),
     ...(input.messageID ? { producerMessageID: input.messageID } : {}), ...(input.closure ? { closure: input.closure } : {}),
+    ...(input.validation && input.validationReport ? { validation: { input: input.validation, report: input.validationReport } } : {}),
     ...(targetDirectory ? { directory: portable(relative(sessionDir, targetDirectory)) } : {}),
     ...(previous ? { previous: previous.id } : {}), origin: { type: Object.keys(origins).length ? "promotion" : "literal",
       ...(Object.keys(origins).length ? { files: origins } : {}), ...(input.delivery ? { delivery: input.delivery } : {}) } }
@@ -584,7 +632,9 @@ async function commit(state: State, stateDir: string, sessionDir: string, operat
     operation.result = { guardado: true, rutas: operation.paths, sesion: sessionDir,
       artefacto_id: operation.artifact.id, hash_manifiesto: operation.artifact.manifestHash,
       operacion_id: operation.logicalID, archivos: operation.artifact.files,
-      ...(operation.artifact.closure ? { cierre: operation.artifact.closure } : {}) }
+       ...(operation.artifact.closure ? { cierre: operation.artifact.closure } : {}),
+       ...(operation.artifact.validation ? { validacion: operation.artifact.validation.report } :
+         operation.artifact.agent !== "revisor" ? { validacion: validateDeliverable({}) } : {}) }
     state.artifacts[operation.artifact.id] = operation.artifact
     if (operation.review) state.reviews[operation.artifact.id] = operation.review
     state.versions = versionRecords(state)
@@ -610,6 +660,7 @@ export async function publishSession(input: {
   sessionID: string; messageID?: string; agent: string; topic: string;
   files: Record<string, FileInput>; group?: string; sources?: string[]; decisions?: string[]; keys?: string[];
   operationID?: string; publicationType?: string; workID?: string;
+  validation?: ValidationInput;
   partial?: { proposito: string; efecto: string; siguiente_accion: string }
 }, options: Options): Promise<Publication> {
   const names = Object.keys(input.files)
@@ -626,6 +677,7 @@ export async function publishSession(input: {
   const nodes = await chain(input.sessionID, input.messageID, options.get)
   if (nodes.at(-1)!.agent !== input.agent) throw new Error("Autor de publicación diferente")
   const request: Request = { ...input, operationID: input.operationID ?? randomUUID(),
+    ...(input.validation ? { validation: validationContract.parse(input.validation) } : {}),
     type: input.publicationType ?? `session:${input.agent}:${input.group ?? "file"}` }
   const key = operationKey(input.sessionID, request.type, request.operationID)
   const settings = await readAgentSettings(options.settingsPath)
@@ -672,6 +724,7 @@ export async function publishSession(input: {
     if (Object.values(state.operations).some(operation => operation.phase !== "confirmed"))
       throw new Error("Publicación interrumpida pendiente; recupera la misma operacion_id antes de iniciar otra")
     const files = await resolveFiles(request, state, sessionDir, nodes, options)
+    request.validationReport = await validateFiles(request, files, state, stateDir, nodes, options)
     for (let i = 0; i < nodes.length; i++) {
       const folder = folderFor(state, nodes, i)
       within(sessionDir, join(sessionDir, folder))
@@ -950,7 +1003,8 @@ function classifyWrapper(value: unknown): string {
 // known derived view; the original is never re-serialized. A real object is
 // serialized deterministically; literal text stays untouched.
 function normalizeSourceResult(declared: SnapshotInput["representacion"], resultado: SnapshotInput["resultado"]):
-  { representacion: "texto_literal" | "objeto_serializado"; content: string; formato: string } {
+  { representacion: "texto_literal" | "objeto_serializado" | "png_base64"; content: string | Buffer; formato: string } {
+  if (declared === "png_base64") return { representacion: declared, content: sourcePng(resultado), formato: "image/png" }
   if (typeof resultado === "string") {
     const parsed = parsedJson(resultado)
     const object = parsed !== null && typeof parsed === "object"
@@ -1053,7 +1107,8 @@ export async function captureSource(input: SnapshotInput, actor: Actor, options:
       throw new Error("Solo el responsable actual o el coordinador propietario capturan fuentes del encargo")
     const normalized = normalizeSourceResult(input.representacion, input.resultado)
     const digest = hash(JSON.stringify([input.encargo_id, input.fuente, input.operacion_id, normalized.representacion,
-      normalized.content, input.version ?? null, input.paginas ?? null, input.campos ?? null, input.pendientes ?? []]))
+      Buffer.isBuffer(normalized.content) ? normalized.content.toString("base64") : normalized.content,
+      input.version ?? null, input.paginas ?? null, input.campos ?? null, input.pendientes ?? []]))
     const operacionKey = hash(JSON.stringify([current.id, "capture_agent_source", input.operacion_id]))
     const existing = Object.values(state.snapshots).find(snapshot => snapshot.operacionKey === operacionKey)
     if (existing) {
@@ -1079,7 +1134,7 @@ export async function captureSource(input: SnapshotInput, actor: Actor, options:
       rootSessionID: nodes[0].id, workID: work.id, producerSessionID: current.id, agent: current.agent,
       ...(actor.messageID ? { producerMessageID: actor.messageID } : {}),
       fuente: input.fuente, corpus: work.corpus, referencia: work.referencia,
-      archivo: `fuentes/${slug(input.fuente)}.txt`, contentSha256, bytes: Buffer.byteLength(normalized.content),
+      archivo: `fuentes/${slug(input.fuente)}.${normalized.representacion === "png_base64" ? "png" : "txt"}`, contentSha256, bytes: Buffer.byteLength(normalized.content),
       representacion: normalized.representacion, formato: normalized.formato, created: Date.now(),
       ...(input.version ? { version: input.version } : {}),
       ...(input.paginas ? { cobertura_paginas: input.paginas } : {}),
@@ -1284,6 +1339,21 @@ export async function sessionArtifacts(raw: ArtifactRequest, actor: Actor, optio
       throw new Error("Artefacto/archivo no asignado o no registrado")
     if (input.archivo !== snapshot.archivo) throw new Error("Artefacto/archivo no asignado o no registrado")
     const bytes = await sourceBlob(stateDir!, snapshot)
+    if (snapshot.representacion === "png_base64") {
+      if (input.cursor || input.localizador || input.vista || input.limite)
+        throw new Error("PNG: lectura nativa completa, sin cursores, localizadores ni vistas de texto")
+      // The same authorized ID/hash branch; no filesystem destination is exposed.
+      sourcePng(bytes.toString("base64"))
+      return { artefacto_id: snapshot.id, archivo: snapshot.archivo, sha256: snapshot.contentSha256,
+        bytes: snapshot.bytes, instantanea: true, fuente: snapshot.fuente, corpus: snapshot.corpus,
+        referencia: snapshot.referencia, representacion: snapshot.representacion, formato: snapshot.formato,
+        ...(snapshot.version ? { version: snapshot.version } : {}),
+        ...(snapshot.pendientes ? { pendientes: snapshot.pendientes } : {}),
+        ...(snapshot.cobertura_paginas ? { cobertura_paginas: snapshot.cobertura_paginas } : {}),
+        ...(snapshot.cobertura_campos ? { cobertura_campos: snapshot.cobertura_campos } : {}),
+        cursor: null, media: { type: "file", mime: "image/png", name: basename(snapshot.archivo),
+          uri: "data:image/png;base64," + bytes.toString("base64") } }
+    }
     const text = bytes.toString("utf8")
     const binding = hash(JSON.stringify([actor.sessionID, work.id, snapshot.id, snapshot.archivo, snapshot.contentSha256]))
     if (input.vista === "linea") return sourceView({ id: snapshot.id, archivo: snapshot.archivo, sha256: snapshot.contentSha256,

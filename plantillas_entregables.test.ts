@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import { access, cp, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
-import { dirname, join, relative, resolve, toNamespacedPath } from "node:path"
+import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { tmpdir } from "node:os"
 import test from "node:test"
@@ -131,9 +131,12 @@ test("APM distribuye plantillas y OpenCode las carga y lee desde cada consumidor
     await mkdir(host)
     for (const path of [".apm", "apm.yml"]) await cp(join(source, path), join(project, path), { recursive: true })
     t.diagnostic(`Node ${process.version}; OpenCode ${run("opencode", ["--version"]).trim()}; ${run("apm", ["--version"]).trim()}`)
-    // APM stages nested paths; the Win32 namespace keeps this fixture within
-    // the worktree even when its absolute path exceeds MAX_PATH.
-    run("apm", ["install", project, "--target", "opencode", "--no-policy", "--root", toNamespacedPath(host)])
+    // APM 0.35.0 refuses every skill destination when --root uses the Win32
+    // namespace prefix (its safety check cannot match a \\?\ root); a plain
+    // path passes the same check. The plain root only stays viable below
+    // MAX_PATH: longest staged path measured 153 chars under the approved
+    // short temp dir, so this fixture must not deepen its directory layout.
+    run("apm", ["install", project, "--target", "opencode", "--no-policy", "--root", host])
     const skillFiles = (await readdir(host, { recursive: true })).map(name => name.replaceAll("\\", "/")).filter(name => name.endsWith("/SKILL.md"))
     const deployed = skillFiles.find(name => /^\.(agents|opencode)\/skills\//.test(name) && name.includes("plantillas-entregables"))
     assert.ok(deployed, "APM debe distribuir la skill")

@@ -28,6 +28,11 @@ export const fileOrigin = tool.schema.object({
   artefacto_id: tool.schema.string().min(1),
   archivo: tool.schema.string().min(1).describe("Ruta relativa exacta del archivo en el manifiesto registrado; nunca ruta arbitraria"),
   sha256: tool.schema.string().regex(/^[a-f0-9]{64}$/),
+  transformaciones: tool.schema.array(tool.schema.object({
+    anterior: tool.schema.string().min(1), nuevo: tool.schema.string(), coincidencias: tool.schema.number().int().positive(),
+  }).strict()).optional().describe("Sustituciones exactas en orden sobre una copia del origen; cada una declara la cantidad esperada de coincidencias"),
+  extraccion: tool.schema.object({ encabezado: tool.schema.string().min(1) }).strict().optional()
+    .describe("Extrae la única sección cuyo encabezado '# ' coincide exactamente, hasta el siguiente encabezado '# '"),
 })
 
 export function fileInput(content?: string, origin?: { artefacto_id: string; archivo: string; sha256: string }) {

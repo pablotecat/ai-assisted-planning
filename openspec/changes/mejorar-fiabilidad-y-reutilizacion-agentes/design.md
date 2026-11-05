@@ -23,7 +23,7 @@ Versiones comprobadas durante la revisión: OpenCode 2.1.2, `@opencode/plugin` 2
 
 **Goals:**
 
-- Cada sesión de implementación produce una capacidad utilizable y compatible sin esperar a todas las demás.
+- Cada capacidad se implementa y prueba sin esperar a todas las demás; las unidades S01–S14 conservan trazabilidad, aunque compartan un bloque continuo de trabajo y regresión.
 - Cambiar una sola vez las fronteras compartidas: identidad/commit en S04; consumo de esa identidad en las sesiones posteriores.
 - Separar almacenamiento, correlación, acceso y revisión; no convertir un archivo guardado o una notificación en prueba de integración semántica.
 - Hacer explícitas diferencias entre evidencia observada, metadatos declarados y comportamiento pendiente de validación.
@@ -191,7 +191,7 @@ Las referencias ya condicionales se conservan; no se introduce inyección normat
 
 ### D12. Sesiones pequeñas y dependencias de capacidad, no referencias circulares
 
-Las sesiones son unidades de implementación y handoff, no estimaciones temporales ni nuevos agentes. El orden siguiente es el recomendado en un único workspace. Pueden pausarse tras un cierre; no se empieza una sesión si sus dependencias duras no están verificadas. Compartir archivo no convierte dos sesiones en seguras para edición simultánea.
+Las sesiones S01–S14 identifican capacidades y criterios de aceptación, no nuevos agentes ni catorce procesos de arranque/cierre obligatorios. El orden siguiente describe dependencias de capacidad en un único workspace. No se consume una capacidad dependiente sin verificar antes sus dependencias duras. Compartir archivo solo exige serializar escrituras: no añade una dependencia funcional ni permite edición simultánea insegura.
 
 | Sesión | Grupo y resultado | Dependencias duras | M cubiertas |
 |---|---|---|---|
@@ -228,6 +228,28 @@ S09 + S11 + S12 + S13 --> S14
 
 La tabla es la autoridad del DAG; el diagrama resume las rutas principales. No hay dependencia S05 de S10, S01/S02 de M03, ni S07 de todo el diagnóstico. S03 permite observar coste, pero su bloqueo de acceso al servicio no bloquea las pruebas deterministas de otras sesiones.
 
+#### Agrupación pendiente — revisión de método del 2026-11-04
+
+**Decisión posterior del usuario (continuación del bloque 3):** «sin límite de plazas ya. Terminemos esto». Se retira el máximo de cinco ensayos; no se amplían el saldo temporal agregado ni las cotas 360000/600000 por ensayo, ni se autorizan otros modelos, reintentos automáticos o cierres por fixtures. Se habilitan ensayos separados S09/S13 con `plainconcepts/glm-5-3` y esfuerzo compatible `xhigh`, preservando S14 para después de verificar sus dependencias. Los presupuestos con plazas que aparecen en los registros anteriores describen su autorización histórica, no el nuevo máximo.
+
+**Ampliación expresa posterior — 2026-11-05:** autorizado el caso S13 dedicado con hijo activo y, después de su primer resultado, **15 minutos de flujo / 20 minutos totales por ensayo** y **40 minutos agregados restantes para S13/S14**. El caso de admisión original conserva su avance único a los 10 s y sus cotas/pruebas 360000/600000. La ampliación solo habilita tiempo de observación: no elimina requisitos, habilita otros modelos o reintentos automáticos, ni inicia S14 sin 13.4 demostrada. La preentrega puede ser texto completo ya emitido en un mensaje con herramientas, sin exigir que haya terminado la investigación; su evidencia/impacto/siguiente acción y solapamiento real con el hijo requieren cotejo de capturas, no marcadores automáticos.
+
+**Nueva continuación autorizada — 2026-11-05:** desde 76/78, un único ensayo S14 nuevo con `plainconcepts/glm-5-3/xhigh`; el usuario renueva el tiempo («todo el tiempo necesario»). El saldo y las cotas anteriores quedan como historia de sus ensayos, no como autorización de reintentos. Solo el driver S14 admite ahora un plazo explícito máximo de **5400000 ms de flujo / 6000000 ms totales**; el lanzamiento efectivo usa **2400000/2700000 ms** dentro de la vigencia OAuth renovada manualmente por el usuario, sin refresh privado. Los cuatro objetivos y toda su aceptación conservan un único plazo compartido; no se reduce alcance para caber en él. S09/S13, sus aceptaciones, cotas y casos no cambian. Jira ES-1374 y Codegraph `C:/PlainConcepts/PROYECTOS/OCA/repo/espidi` autorizados solo en lectura; commit y archivo habilitados al completar criterios, sin push. Cualquier fallo se conserva y detiene otro ensayo, sin archivo por cobertura parcial.
+
+La ruta operativa detallada está en [tasks.md](tasks.md#ruta-pendiente-por-bloques--2026-11-04): **S10→S11**, después **S13 y remates técnicos S09**, y finalmente **desbloqueos autorizados y S14**. Es una prioridad de trabajo con un único frente principal, no un DAG nuevo: S13 ya está habilitada por S07/S08 y S10 no depende de S09. Se conservan las casillas y las siete specs sin rebajar sus criterios. No se reabren S08 ni sus verificaciones históricas.
+
+Dentro del primer bloque, S11 solo empieza después de demostrar la capacidad S10 con sus pruebas dirigidas: perfiles, IDs/cobertura, citas y materialización literal/promovida con rechazo íntegro antes del commit; también se actualizan entonces sus formatos y ayuda. No basta con escribir el validador. La suite raíz exigida por 10.5 y 11.5 se comparte al cerrar el bloque estable; **compartir esa regresión no marca 10.5 anticipadamente ni declara S10 cerrada**. Si falla la puerta de capacidad S10, S11 se detiene; S13 o las comprobaciones técnicas S09 siguen siendo independientes.
+
+Cada capacidad incorpora sus tests y documentación al modificar su propietario. Se reutilizan fixtures, observadores, supervisión y consumidores aceptados; no se crea un runner, preflight general ni informe intermedio adicional. Se ejecutan pruebas dirigidas al cambiar una frontera y una regresión raíz al cerrar el bloque de código estable, sin suites de línea base ni repeticiones por cada casilla o actualización del handoff. La estrategia de validación inferior precisa la vigencia de esa evidencia.
+
+**Puertas que la agrupación no elimina:**
+
+- **S09:** pueden completarse las comprobaciones deterministas de barrera/corrección única y renovación del localizador (9.2/9.3), pero no sustituyen la lectura visual real de 9.1. El HTTP 400 de esfuerzo no acredita visión ni autoriza cambiar esfuerzo/variante/modelo o repetir el ensayo. S14 conserva su dependencia dura de S09: no se inicia su campaña para intentar resolver después esa dependencia dentro del mismo ensayo.
+- **APM:** el último resultado raíz es 175/176, con rechazo de destino inseguro bajo APM 0.35.0 y causa no demostrada, distinto del timeout histórico. No bloquea implementar capacidades independientes, pero no permite declarar verde la regresión global ni dar por verificada la instalación final. Su diagnóstico se difiere a un encargo explícito y acotado; no se desactiva el control, cambia versión o acepta una excepción silenciosamente.
+- **Presupuesto:** se mantienen dos reservas, S13 y S14, con el modelo único y límites vigentes del handoff S09. Los milisegundos agregados sobrantes no crean más plazas. El ensayo S13 puede demostrar 13.4 y conductas adicionales solo si se observan; el S14 conserva 14.1 y la reutilización S08 entre preguntas. Ninguno demuestra por sí mismo servicios reales ni autoriza repetir S09. Si falta compatibilidad de la configuración efectiva, se pide decisión antes de gastar una reserva en diagnosticarla.
+
+Con las autorizaciones actuales no hay cierre total garantizado: 9.1 sigue sin prueba visual y no tiene una repetición reservada. El bloque final espera esa decisión, la evidencia S09 necesaria y la resolución de las verificaciones globales, sin paralizar los dos bloques independientes. Como alternativa, el usuario puede elegir una entrega parcial tras S10/S11, ampliable con S13: candidata con alcance y estado de regresión explícitos, S09/S14 pendientes y sin archivo del cambio. Eso no retira requisitos ni aprueba excepciones; cualquier reducción definitiva de alcance, traslado de reserva o ampliación de presupuesto requiere decisión expresa y actualización de artefactos.
+
 Trazabilidad completa de las ideas:
 
 | Mejora | Sesiones de implementación | Evidencia de cierre principal |
@@ -262,7 +284,7 @@ Trazabilidad completa de las ideas:
 
 ## Migration Plan
 
-1. Implementar y verificar por sesiones. Cada una mantiene instalable el paquete y no reescribe copias instaladas como fuente.
+1. Implementar y verificar por capacidades, agrupadas según D12. Cada bloque conserva compatibilidad y prueba su instalación en consumidor separado; no declara instalable lo que siga bloqueado ni reescribe copias instaladas como fuente.
 2. S04 incorpora lectura compatible del estado anterior y extensión aditiva al guardar. No modifica originales, versiones ni informes históricos; la importación de un artefacto anterior calcula identidad solo tras verificar propietario y archivos, y no inventa fecha de publicación, encargo ni aprobación.
 3. El primer guardado con datos nuevos preserva una copia verificable del control anterior. Una raíz con versión futura desconocida debe rechazarse con diagnóstico, no reescribirse descartando campos.
 4. Probar instalación y actualización en consumidor separado, incluyendo comentarios JSONC, personalizaciones, dependencias y conflictos legacy. Las nuevas herramientas se registran en el mismo plugin; no reaparece un registrador independiente ni el directorio singular `plugin/` instalado.
@@ -276,6 +298,7 @@ Trazabilidad completa de las ideas:
 - **Motor real sin LLM:** consumidor instalado, herramientas efectivas directas/Code Mode, permisos Jira bajo ambos alias, lectura acotada, publicación antes/después de reload, reintento y estado persistido. Reutilizar `test-support/opencode.mjs`.
 - **Conducta con modelo:** casos de herramienta directa, dos investigaciones independientes, respuesta tardía, original reutilizado, PNG legible y respuesta concisa con fallback. El prompt de entrada expresa el objetivo, no dicta la secuencia que se pretende acreditar. Un fixture programado que ejecuta llamadas concurrentes no demuestra que el agente las elija.
 - **Servicios reales:** Jira y Codegraph se validan solo con fuente y acceso autorizados. Si faltan, registrar el pendiente; no elevar pruebas sintéticas a validación real.
-- **Por sesión con cambio de comportamiento/runtime:** ejecutar `node --test *.test.ts` y `git diff --check`; añadir los casos a las pruebas existentes cuando encajen. Para nuevas unidades acotadas pueden añadirse tests raíz específicos; no introducir un segundo runner.
+- **Por bloque con cambio de comportamiento/runtime:** añadir y ejecutar pruebas dirigidas con cada capacidad y actualizar su documentación allí, no trasladarlas a S14. Ejecutar una suite raíz completa `node --test *.test.ts` al cerrar el código estable del bloque y `git diff --check`; puede conservarse `--test-concurrency=2`, ya usado sin excluir pruebas. Una misma ejecución acredita varias tareas de cierre sobre los mismos bytes y entorno identificados. Un fallo se conserva y deja pendientes los criterios afectados, sin impedir trabajo funcionalmente independiente ni convertirse en excepción aceptada.
+- **Vigencia y cierre final:** no repetir suite raíz por un handoff o edición exclusivamente documental; usar las comprobaciones documentales de AGENTS.md y OpenSpec. Si cambia código, contrato, prueba o entorno relevante, comprobar lo afectado y ejecutar la regresión correspondiente al siguiente cierre estable, antes de declararlo verificado. S14.6 requiere una suite final completa sobre la versión final; no otra de referencia antes de cada variante o ensayo. Instalación, permisos y publicación con reload real mantienen todas sus comprobaciones exigidas en consumidores privados.
 - **Comparación:** fijar casos y condiciones antes de S01/S02 cuando se disponga de datos, conservando trazas sanitizadas para reducirlas con S03. Si no hay línea base comparable, no recrearla como si fuera histórica: informar resultados posteriores y limitación. Comparar camino crítico, concurrencia, llamadas por capa, repeticiones, caracteres publicados y errores mecánicos sin sumar tiempos solapados.
-- **Handoff:** cada sesión deja tareas marcadas solo si están verificadas, contratos/campos incorporados, pruebas y límites reales, y siguiente sesión habilitada. El registro de resultados final se publica como documento nuevo; no se actualizan informes históricos para aparentar nuevas verificaciones.
+- **Handoff:** cada bloque deja en `tasks.md` tareas marcadas solo si están verificadas, contratos/campos incorporados, pruebas y límites reales, y siguiente trabajo habilitado. Una pausa reutiliza ese mismo registro; no requiere un informe narrativo por sesión. El registro de resultados final exigido por 14.6 se publica como documento nuevo; no se actualizan informes históricos para aparentar nuevas verificaciones.

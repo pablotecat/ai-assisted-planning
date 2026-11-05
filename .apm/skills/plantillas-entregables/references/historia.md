@@ -47,6 +47,14 @@ Las reglas que no pueden expresarse como escenario completo (definiciones, permi
 
 ## Incidencias y contenedores
 
+### Perfil mecánico explícito
+
+El perfil `historia-incidencias-v1` identifica los encabezados españoles y campos de esta plantilla. Declara cada archivo como `historia` o `incidencias`, incluidos los globales. Comprueba apartados únicos no vacíos y los espacios `CA-` confirmados y `PC-` propuestos; no decide suficiencia funcional ni aprobación. Sin perfil, los documentos genéricos/anteriores mantienen su contrato y su validación mecánica queda no determinada. Un documento traducido requiere un perfil compatible, no renombrar sus apartados para simular conformidad.
+
+El perfil distingue historias por encabezado `# <ID> — ...`, también dentro de un contenedor; los IDs de criterio son únicos dentro de cada historia. Declara las fuentes originales con su catálogo de criterios y fragmentos UTF-16 `[inicio,fin)` sobre el texto original, junto al ID y hash de la instantánea. La cobertura se contrasta contra ese catálogo explícito, no contra una interpretación semántica de la fuente. Cada original tiene una fila estructurada y su fila visible en incidencias: `fuente`, `original`, `archivo`, `destinos[{archivo,criterio:"H1/CA-1"}]`, `estado` (`conservado`, `repartido`, `pendiente`, `propuesta`). Los pendientes pueden tener destinos vacíos; los repartidos conservan todos sus destinos. Los recuentos proceden de IDs únicos, no del total narrado. Una referencia OR-13 sin entrada en el catálogo es alerta, no decisión sobre qué requisito significa. Las referencias vinculadas entre archivos declaran texto, archivo destino y hash de sus bytes; sin vínculo, la comprobación queda pendiente.
+
+Las `citas` declaran `archivo` de incidencias, `inicio/fin` del literal publicado, `fuente`, `inicio_fuente/fin_fuente` y `sha256` del fragmento original exacto (además del hash de fuente completa). Todos los intervalos son UTF-16, fin exclusivo. El cotejo solo normaliza CRLF a LF, un prefijo externo Markdown `> ` (o `>`) por línea y un par externo de comillas invertidas simples. Conserva espacios, palabras, acentos, puntuación y erratas internas: `presevar` del original debe seguir así; `eliminararan` no equivale a `eliminaran`, ni `distintos de` a `diferentes de`. Un literal no vinculado queda sin comprobar, no aprobado. El cotejo no resuelve autoridad o equivalencia semántica.
+
 `borrador.md` agrupa una o varias historias con esta estructura; identifica las asignadas y los fragmentos fuera del alcance. Si hay división, incluye un mapa origen → resultados y el valor de cada uno. La historia final va en `<ID>.md`; las incidencias son documentos distintos, no sustituyen las preguntas de la historia y además custodian la evidencia y la trazabilidad al original. Usa esta estructura tanto para `<ID>-incidencias.md` como para `incidencias-globales.md` (en este último, incluye conflictos entre historias):
 
 ```markdown

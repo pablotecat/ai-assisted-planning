@@ -14,7 +14,7 @@ El flujo actual puede repetir investigaciones y documentos, confundir herramient
 - Reutilizar instantáneas completas mediante acceso a artefactos registrados, acotado por rol, encargo y corpus; verificar lectura de un adjunto antes de procesar su lote.
 - Publicar desde artefactos completos, incorporar después validación mecánica y transformaciones exactas, y mantener revisión semántica independiente.
 - Cambiar deliberadamente la respuesta posterior a un guardado confirmado: resumen y rutas accesibles, con contenido completo si se solicita o si el guardado/acceso falla. No se eliminan fuentes, hallazgos ni pendientes.
-- Organizar la implementación en 14 sesiones con entradas, dependencias duras, exclusiones, pruebas y handoff. M01 y M03 se entregan por partes útiles, no como prerrequisitos universales.
+- Conservar S01–S14 como unidades de trazabilidad con sus dependencias duras, requisitos y pruebas; agrupar lo pendiente en pocos bloques continuos con un único frente principal y regresión compartida por bloque estable, según D12 y `tasks.md`. M01 y M03 se entregan por partes útiles, no como prerrequisitos universales. La agrupación no autoriza ensayos adicionales, excepciones ni cierre de criterios sin demostrar.
 
 ## Capabilities
 

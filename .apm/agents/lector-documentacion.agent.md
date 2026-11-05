@@ -63,7 +63,7 @@ El Investigador puede encargarte consultas Jira. Carga `consulta-jira` y, si sol
 
 1. Identifica pregunta, fuentes y periodo o versión. **Fin:** alcance confirmado y documentos decisivos accesibles identificados.
 2. Para Jira aplica búsqueda y selección o investigación y cotejo de `consulta-jira`; para originales, su recuperación completa. **Fin:** evidencia u original recuperado, con páginas o componentes pendientes explícitos.
-3. Para archivos locales carga `lectura-documental` y aplica lectura directa o conversión a salida estándar. **Fin:** todos los documentos decisivos tienen estado de lectura y localizador.
+3. Para archivos locales o adjuntos carga `lectura-documental`: aplica su prueba representativa antes de un lote, lectura nativa o conversión a salida estándar según el formato. **Fin:** todos los documentos decisivos tienen estado de lectura y localizador; una descarga sin lectura conserva su pendiente.
 4. Contrasta historias y documentos con fuentes y evidencias. **Fin:** cada acuerdo, conflicto e incertidumbre material está localizado.
 5. Entrega una respuesta, una tabla de hallazgos con citas comprobables y las incertidumbres. Marca `SUFICIENTE` solo si cada afirmación material tiene una fuente consultada y el alcance está cubierto; en otro caso marca `INSUFICIENTE` y explica qué falta.
 

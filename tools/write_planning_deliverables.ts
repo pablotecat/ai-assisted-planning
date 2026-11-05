@@ -1,5 +1,6 @@
 import { fileInput, fileOrigin, operationID, partial, tool, workID } from "./define_tool.ts"
 import { publishSession } from "./session_store.ts"
+import { validation } from "./deliverable_contract.ts"
 
 export default tool({
   description: "Publica todas las historias, incidencias y globales juntas: literal u origen registrado por archivo, exclusivamente uno; devuelve guardado:false si está desactivado.",
@@ -7,6 +8,7 @@ export default tool({
     operacion_id: operationID,
     encargo_id: workID,
     parcial: partial,
+    validacion: validation,
     historias: tool.schema.array(tool.schema.object({
       clave: tool.schema.string(), contenido: tool.schema.string().optional(), origen_contenido: fileOrigin.optional(),
       incidencias: tool.schema.string().optional(), origen_incidencias: fileOrigin.optional(),
@@ -32,6 +34,7 @@ export default tool({
     return JSON.stringify(await publishSession({ sessionID: context.sessionID, messageID: context.messageID,
       agent: context.agent, topic: historias[0].clave, group: "entrega", files,
       keys: historias.map((item) => item.clave), sources: args.fuentes, decisions: args.decisiones,
-      operationID: args.operacion_id, publicationType: "write_planning_deliverables", workID: args.encargo_id, partial: args.parcial }, { get: context.resolver }))
+       operationID: args.operacion_id, publicationType: "write_planning_deliverables", workID: args.encargo_id, partial: args.parcial,
+       validation: args.validacion }, { get: context.resolver }))
   },
 })
