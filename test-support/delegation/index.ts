@@ -1,6 +1,5 @@
 // Private-server contract fixture. Not distributed with the planning package.
 import { Plugin, Rpc } from "@opencode/plugin"
-import { Schema } from "effect"
 
 const Contract = Rpc.define({ id: "delegation-test", methods: {
   run: { input: { type: "object" }, output: { type: "object" }, errors: { failed: { type: "object" } } },
@@ -52,21 +51,6 @@ export default Plugin.define({
       }
       if (input.action === "events") return { events }
       if (input.action === "agents") return { agents: await ctx.agent.list(), tools: (await ctx.tool.list()).map(t => t.id) }
-      if (input.action === "event") {
-        await new Promise<void>(resolve => {
-          const notify = () => {
-            if (events.filter(e => e.type === input.type && e.sessionID === input.sessionID).length > input.afterCount) {
-              listeners.delete(notify); resolve()
-            }
-          }
-          listeners.add(notify); notify()
-        })
-        return { observed: true }
-      }
-      if (input.action === "catalog") {
-        const tool = (await ctx.tool.list()).find(t => t.id === "subagent")!
-        return { description: tool.description, schema: Schema.toJsonSchemaDocument(tool.input as never) }
-      }
       if (input.action === "wait") { await ctx.session.wait({ sessionID: input.sessionID }); return { waited: true } }
       const tool = (await ctx.tool.list()).find(t => t.id === (input.tool ?? "subagent"))!
       const result = await tool.execute(input.args, { sessionID: input.sessionID, agent: input.agent,

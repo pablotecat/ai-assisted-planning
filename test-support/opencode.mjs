@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
-import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { execFileSync, spawn } from "node:child_process"
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { executable, isTransientTransportFailure, opencode } from "../scripts/verify-opencode.mjs"
 
 export { opencode }
@@ -40,27 +41,8 @@ export async function withServer(cwd, env, run, expected = ["planning-test"]) {
       })
     })
     const connected = { ...env, OPENCODE_TEST_SERVER: url }
-    // Tanto la comprobación de salud inicial como la primera llamada /api/plugin del bucle de
-    // plugins pueden toparse con un fallo transitorio de transporte del CLI contra un servidor
-    // privado recién arrancado. Firma original demostrada en suites raíz completas («Could not
-    // reach server … Transport: The operation timed out», trama real en el primer sondeo de
-    // plugins; ver R1-F2/9322e78). Tres firmas más de la misma familia quedaron demostradas sin
-    // cobertura durante el desarrollo y revisión del núcleo S08 (commit 55d127e): «spawnSync
-    // cmd.exe ETIMEDOUT» y «aborted due to timeout» del timeout del spawnSync en
-    // withServer/prepareConsumer (implementador, reproducido 2 veces, superado por repetición
-    // aislada) y «TimeoutError: The operation timed out» en la ruta de verifyOpenCode (revisor).
-    // La CAUSA subyacente de todos ellos permanece INDETERMINADA (misma familia que el
-    // ETIMEDOUT histórico de S05); este reintento no la atribuye ni la resuelve.
-    // Predicado compartido isTransientTransportFailure (definido junto a opencode() en
-    // scripts/verify-opencode.mjs) para que ambos consumidores coincidan exactamente: solo
-    // cubre la familia OBSERVADA de fallos de transporte/arranque del proceso CLI; los errores
-    // de dominio reales del servidor (HTTP 4xx/5xx, plugins fallidos) no contienen estas firmas
-    // y siguen fallando en firme.
-    // Reintento acotado compartido por ambas llamadas, dentro del presupuesto (deadline) ya
-    // existente de cada llamada y con espera corta de 250 ms; si el proceso del servidor muere,
-    // se agota el presupuesto o el fallo no es de la familia, se propaga el error real del CLI
-    // sin enmascarar (los plugins fallidos se siguen detectando en cuanto una llamada tiene
-    // éxito: assert.deepEqual(failed, []) solo mira respuestas reales).
+    // Retry only known startup transport failures within each deadline.
+    // The shared predicate keeps domain errors and failed plugins fatal.
     const retryTransport = async (deadline, fetch) => {
       while (true) {
         try {
@@ -92,4 +74,60 @@ export async function withServer(cwd, env, run, expected = ["planning-test"]) {
 export const probePlugin = new URL("./probe", import.meta.url).href
 export function probe(cwd, env, input) {
   return api("post", "/api/rpc/planning-test/run", cwd, env, { input }).output
+}
+
+// Only the private server's generated password is used, never shared credentials.
+export function privateRequest(connected, host) {
+  const headers = { "content-type": "application/json", "x-opencode-directory": host,
+    authorization: "Basic " + Buffer.from(`opencode:${connected.OPENCODE_PASSWORD}`).toString("base64") }
+  return async (method, path, input, timeout = 30_000) => {
+    assert.ok(timeout > 0, `Private request budget exhausted: ${path}`)
+    const response = await fetch(connected.OPENCODE_TEST_SERVER + path, { method, headers,
+      ...(input === undefined ? {} : { body: JSON.stringify(input) }), signal: AbortSignal.timeout(Math.ceil(timeout)) })
+    assert.ok(response.ok, `Private request ${path}: ${response.status}`)
+    const text = await response.text()
+    return text ? JSON.parse(text) : {}
+  }
+}
+
+export async function prepareConsumer(root) {
+  const source = fileURLToPath(new URL("..", import.meta.url))
+  const host = join(root, "consumer"), config = join(host, ".opencode")
+  const env = { ...process.env, HOME: root, USERPROFILE: root, APPDATA: join(root, "appdata"), LOCALAPPDATA: join(root, "localappdata"),
+    XDG_CONFIG_HOME: join(root, "config"), XDG_CACHE_HOME: join(root, "cache"), XDG_DATA_HOME: join(root, "data"), XDG_STATE_HOME: join(root, "state"),
+    OPENCODE_CONFIG_DIR: join(root, "config/opencode"), OPENCODE_CONFIG: "", OPENCODE_CONFIG_CONTENT: "{}", OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+    OPENCODE_DISABLE_MODELS_FETCH: "1", OPENCODE_DISABLE_EXTERNAL_SKILLS: "1", OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
+    TEMP: root, TMP: root, TMPDIR: root, npm_config_cache: join(process.env.LOCALAPPDATA, "npm-cache") }
+  delete env.OPENCODE_SESSION_ID
+  await mkdir(join(config, "agents"), { recursive: true })
+  for (const dir of ["plugin", "tools"]) await cp(join(source, dir), join(config, dir === "plugin" ? "plugins" : dir), { recursive: true })
+  await cp(join(source, ".apm/skills"), join(host, ".agents/skills"), { recursive: true })
+  for (const agent of ["refinador", "investigador", "lector-codigo", "lector-documentacion", "revisor"])
+    await cp(join(source, ".apm/agents", `${agent}.agent.md`), join(config, "agents", `${agent}.md`))
+  for (const name of ["package.json", "agent-settings.example.json"]) await cp(join(source, name), join(config, name))
+  await cp(join(source, "agent-settings.example.json"), join(config, "agent-settings.json"))
+  execFileSync(process.execPath, [join(source, "scripts/setup-opencode.mjs")], { cwd: host, env, timeout: 240_000, stdio: "pipe" })
+  const settings = JSON.parse(await readFile(join(config, "opencode.json"), "utf8"))
+  settings.model = "fixture/test"
+  return { host, config, env, settings }
+}
+
+export async function loadStates(host) {
+  const control = join(host, "informes-agente/sesiones/.control")
+  const dirs = await readdir(control).catch(error => { if (error.code === "ENOENT") return []; throw error })
+  return Promise.all(dirs.map(async dir => JSON.parse(await readFile(join(control, dir, "state.json"), "utf8"))))
+}
+
+export function saveEvidence(root, name, value) {
+  const sanitize = value => {
+    if (typeof value === "string") return value
+      .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
+      .replace(/https?:\/\/[^\s"<>]+[?][^\s"<>]+/gi, "[URL_WITH_QUERY_REDACTED]")
+    if (Array.isArray(value)) return value.map(sanitize)
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !/^(authorization|headers|password|access|refresh|apiKey|native|reasoning|encryptedContent)$/i.test(key))
+      .map(([key, v]) => [key, sanitize(v)]))
+    return value
+  }
+  return writeFile(join(root, name), JSON.stringify(sanitize(value), null, 2) + "\n")
 }

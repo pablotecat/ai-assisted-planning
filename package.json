@@ -1,5 +1,9 @@
 {
   "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=2 tests/*.test.ts",
+    "test:docs": "node --test --test-name-pattern=\"formatos y catálogo|consumidores comparten|plan integrado\" tests/plantillas_entregables.test.ts"
+  },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.30",
     "@opencode/plugin": "2.1.2",
